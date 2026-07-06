@@ -23,6 +23,7 @@ node_modules
 # misc
 .DS_Store
 *.pem
+Thumbs.db
 
 # debug
 npm-debug.log*
@@ -30,25 +31,48 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env*.local
 
 # vercel
 .vercel
 
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-local-*
-.claude
-.z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
 
+# Local tooling & binaries (gh CLI installed locally)
+.local/
+
+# Database files (SQLite)
+db/
+
+# Logs
+dev.log
 server.log
-# Skills directory
-/skills/
+*.log
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*~
+
+# Python (scripts/)
+scripts/__pycache__/
+*.pyc
+
+# Build artifacts in download/
+download/*.png
+download/*.pdf
+download/*.docx
+download/*.xlsx
+download/*.pptx
+download/*.jpg
+download/*.jpeg
+
+# Cache
+.cache/
+.turbo/
+.eslintcache
