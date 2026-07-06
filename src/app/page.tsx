@@ -7,10 +7,11 @@ import {
   LayoutDashboard, Folder, FileText, File, Tag, MessageSquare,
   Image as ImageIcon, Settings, Plus, Search, ExternalLink, Github,
   Pencil, Trash2, X, Code2, Sparkles, Calendar, Eye, EyeOff, Sun, Moon,
-  Star, Layers, TrendingUp, Users, FolderKanban, ChevronRight, Menu, Home,
+  Star, Layers, TrendingUp, Users, FolderKanban, ChevronRight, Menu,
   Save, MessageCircle, Tag as TagIcon, Palette, ArrowUpRight, Mail,
-  Hash, FileEdit, Inbox, Filter, Download,
-} from 'lucide-react'
+  Hash, FileEdit, Inbox, Filter, Download, Home as HomeIcon,
+}
+from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -207,7 +208,7 @@ function Sidebar({ section, setSection, counts, mobileOpen, setMobileOpen }: {
         <div className="border-t border-border p-3">
           <Button variant="outline" size="sm" className="w-full justify-start" asChild>
             <a href="/" target="_blank">
-              <Home className="h-4 w-4 mr-2" /> Zobacz stronę
+              <HomeIcon className="h-4 w-4 mr-2" /> Zobacz stronę
               <ExternalLink className="h-3 w-3 ml-auto" />
             </a>
           </Button>
@@ -1365,7 +1366,7 @@ function CMSApp() {
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <Button asChild variant="outline" size="sm">
-                <a href="/" target="_blank"><Home className="h-3.5 w-3.5 mr-1.5" /> Zobacz stronę</a>
+                <a href="/" target="_blank"><HomeIcon className="h-3.5 w-3.5 mr-1.5" /> Zobacz stronę</a>
               </Button>
             </div>
           </div>
