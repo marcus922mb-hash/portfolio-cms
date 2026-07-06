@@ -1,4 +1,4 @@
-// Prisma schema for Portfolio CMS
+// Prisma schema - WordPress-like CMS
 
 generator client {
   provider = "prisma-client-js"
@@ -7,23 +7,132 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["portfolio_cms"]
 }
 
+// ============ PROJECTS ============
 model Project {
   id          String   @id @default(cuid())
   title       String
   summary     String
-  description String   // Markdown content
-  techStack   String   // JSON array as string (SQLite limitation)
+  description String
+  techStack   String
   demoUrl     String?
   repoUrl     String?
   imageUrl    String?
-  status      String   @default("published") // "draft" | "published"
+  status      String   @default("published")
   featured    Boolean  @default(false)
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@schema("portfolio_cms")
   @@index([status])
   @@index([order])
+}
+
+// ============ POSTS (Blog) ============
+model Post {
+  id            String    @id @default(cuid())
+  title         String
+  slug          String    @unique
+  excerpt       String
+  content       String    // Markdown
+  featuredImage String?
+  status        String    @default("published") // draft | published
+  authorName    String    @default("Admin")
+  categoryId    String?
+  viewCount     Int       @default(0)
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  comments      Comment[]
+
+  @@schema("portfolio_cms")
+  @@index([status])
+  @@index([publishedAt])
+  @@index([categoryId])
+}
+
+// ============ PAGES (Static) ============
+model Page {
+  id            String    @id @default(cuid())
+  title         String
+  slug          String    @unique
+  content       String    // Markdown
+  featuredImage String?
+  status        String    @default("published")
+  order         Int       @default(0)
+  showInMenu    Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@schema("portfolio_cms")
+  @@index([status])
+  @@index([slug])
+}
+
+// ============ CATEGORIES ============
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  color     String   @default("#6b7280")
+  createdAt DateTime @default(now())
+
+  posts     Post[]
+
+  @@schema("portfolio_cms")
+}
+
+// ============ TAGS ============
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  @@schema("portfolio_cms")
+}
+
+// ============ COMMENTS ============
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorName String
+  authorEmail String
+  content   String
+  status    String   @default("pending") // pending | approved | spam
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@schema("portfolio_cms")
+  @@index([postId])
+  @@index([status])
+}
+
+// ============ MEDIA ============
+model Media {
+  id        String   @id @default(cuid())
+  url       String
+  filename  String
+  altText   String?
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@schema("portfolio_cms")
+  @@index([createdAt])
+}
+
+// ============ SETTINGS ============
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  @@schema("portfolio_cms")
 }
