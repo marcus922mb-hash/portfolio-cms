@@ -10,6 +10,8 @@ import {
   Star, Layers, TrendingUp, Users, FolderKanban, ChevronRight, Menu,
   Save, MessageCircle, Tag as TagIcon, Palette, ArrowUpRight, Mail,
   Hash, FileEdit, Inbox, Filter, Download, Home as HomeIcon,
+  History, Activity, Rss, Database, Lock, UserPlus, Clock, FileSearch,
+  Layout as LayoutIcon, ArrowLeft,
 }
 from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,32 +38,48 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
+import { PublicSite, type PublicView } from '@/components/cms/PublicSite'
 
 // ==================== Types ====================
 type Project = {
   id: string; title: string; summary: string; description: string
   techStack: string; demoUrl: string | null; repoUrl: string | null
   imageUrl: string | null; status: string; featured: boolean
-  order: number; createdAt: string; updatedAt: string
+  order: number; clientName?: string | null; projectUrl?: string | null
+  startDate?: string | null; endDate?: string | null
+  metaTitle?: string | null; metaDescription?: string | null; ogImage?: string | null
+  viewCount?: number
+  createdAt: string; updatedAt: string
 }
 
 type Post = {
   id: string; title: string; slug: string; excerpt: string; content: string
   featuredImage: string | null; status: string; authorName: string
-  categoryId: string | null; viewCount: number; publishedAt: string | null
+  categoryId: string | null; viewCount: number
+  publishedAt: string | null; scheduledAt?: string | null
+  metaTitle?: string | null; metaDescription?: string | null; ogImage?: string | null; canonicalUrl?: string | null
   createdAt: string; updatedAt: string
   category?: { id: string; name: string; color: string } | null
+  tags?: { tag: { id: string; name: string; slug: string; color: string } }[]
   comments?: Comment[]
-  _count?: { comments: number }
+  revisions?: Revision[]
+  _count?: { comments: number; revisions: number }
 }
 
 type Page = {
   id: string; title: string; slug: string; content: string
   featuredImage: string | null; status: string; order: number
-  showInMenu: boolean; createdAt: string; updatedAt: string
+  showInMenu: boolean
+  metaTitle?: string | null; metaDescription?: string | null; ogImage?: string | null
+  createdAt: string; updatedAt: string
 }
 
 type Category = {
+  id: string; name: string; slug: string; color: string; createdAt: string
+  _count?: { posts: number }
+}
+
+type TagType = {
   id: string; name: string; slug: string; color: string; createdAt: string
   _count?: { posts: number }
 }
@@ -74,12 +92,33 @@ type Comment = {
 
 type Media = {
   id: string; url: string; filename: string; altText: string | null
-  mimeType: string; size: number; createdAt: string
+  mimeType: string; size: number; folder: string; createdAt: string
+}
+
+type Revision = {
+  id: string; postId: string; title: string; excerpt: string
+  content: string; createdBy: string; createdAt: string
+}
+
+type ActivityLog = {
+  id: string; userId: string | null; userName: string
+  action: string; entity: string; entityId: string | null
+  details: string | null; ipAddress: string | null; createdAt: string
+}
+
+type ContactSubmission = {
+  id: string; name: string; email: string; subject: string
+  message: string; status: string; createdAt: string
+}
+
+type User = {
+  id: string; email: string; name: string; role: string
+  avatar?: string | null; bio?: string | null; createdAt: string
 }
 
 type Settings = Record<string, string>
 
-type Section = 'dashboard' | 'projects' | 'posts' | 'pages' | 'categories' | 'comments' | 'media' | 'settings'
+type Section = 'dashboard' | 'projects' | 'posts' | 'pages' | 'categories' | 'tags' | 'comments' | 'media' | 'contact' | 'activity' | 'search' | 'users' | 'backup' | 'settings'
 
 // ==================== Helpers ====================
 const emptySubscribe = () => () => {}
@@ -141,8 +180,14 @@ const NAV: { id: Section; label: string; icon: React.ElementType; group?: string
   { id: 'posts', label: 'Wpisy', icon: FileText, group: 'Treść' },
   { id: 'pages', label: 'Strony', icon: File, group: 'Treść' },
   { id: 'categories', label: 'Kategorie', icon: Tag, group: 'Treść' },
+  { id: 'tags', label: 'Tagi', icon: TagIcon, group: 'Treść' },
   { id: 'comments', label: 'Komentarze', icon: MessageSquare, group: 'Interakcje' },
+  { id: 'contact', label: 'Wiadomości', icon: Inbox, group: 'Interakcje' },
   { id: 'media', label: 'Biblioteka mediów', icon: ImageIcon, group: 'Interakcje' },
+  { id: 'search', label: 'Wyszukiwarka', icon: FileSearch, group: 'Narzędzia' },
+  { id: 'activity', label: 'Log aktywności', icon: Activity, group: 'Narzędzia' },
+  { id: 'users', label: 'Użytkownicy', icon: Users, group: 'System' },
+  { id: 'backup', label: 'Kopia zapasowa', icon: Database, group: 'System' },
   { id: 'settings', label: 'Ustawienia', icon: Settings, group: 'System' },
 ]
 
@@ -1297,29 +1342,558 @@ function SettingsSection({ settings, onChange }: { settings: Settings; onChange:
   )
 }
 
+// ==================== Tags Section ====================
+function TagsSection({ tags, onChange }: { tags: TagType[]; onChange: () => void }) {
+  const [editing, setEditing] = useState<TagType | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<TagType | null>(null)
+  const [form, setForm] = useState<any>({})
+
+  const open = (t: TagType | null) => {
+    setEditing(t)
+    setForm(t ? { name: t.name, color: t.color } : { name: '', color: '#6b7280' })
+    setFormOpen(true)
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Tagi" description={`${tags.length} tagów`} action={<Button onClick={() => open(null)}><Plus className="h-4 w-4 mr-2" /> Dodaj tag</Button>} />
+
+      {tags.length === 0 ? (
+        <EmptyState icon={TagIcon} title="Brak tagów" description="Dodaj pierwszy tag." action={<Button onClick={() => open(null)}><Plus className="h-4 w-4 mr-2" /> Dodaj tag</Button>} />
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {tags.map(t => (
+            <Card key={t.id} className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: t.color }} />
+                  <h3 className="font-semibold">#{t.name}</h3>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => open(t)}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(t)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">{t._count?.posts || 0} wpisów</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader><DialogTitle>{editing ? 'Edytuj tag' : 'Nowy tag'}</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2"><Label>Nazwa *</Label><Input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="grid gap-2">
+              <Label>Kolor</Label>
+              <div className="flex gap-2 items-center">
+                <Input type="color" value={form.color || '#6b7280'} onChange={e => setForm({ ...form, color: e.target.value })} className="w-16 h-10 p-1" />
+                <Input value={form.color || ''} onChange={e => setForm({ ...form, color: e.target.value })} className="font-mono" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFormOpen(false)}>Anuluj</Button>
+            <Button onClick={async () => {
+              if (!form.name?.trim()) { toast.error('Nazwa jest wymagana'); return }
+              if (editing) {
+                await fetch(`/api/tags/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                toast.success('Tag zaktualizowany')
+              } else {
+                await fetch('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                toast.success('Tag dodany')
+              }
+              setFormOpen(false); onChange()
+            }}>{editing ? 'Zapisz' : 'Dodaj'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć tag?</AlertDialogTitle>
+            <AlertDialogDescription>Tag zostanie odpięty od wszystkich wpisów.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/tags/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Tag usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+// ==================== Contact Submissions Section ====================
+function ContactSection({ submissions, onChange }: { submissions: ContactSubmission[]; onChange: () => void }) {
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [viewing, setViewing] = useState<ContactSubmission | null>(null)
+  const filtered = statusFilter === 'all' ? submissions : submissions.filter(s => s.status === statusFilter)
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Wiadomości kontaktowe" description={`${submissions.length} wiadomości`} />
+
+      <div className="flex flex-wrap gap-2">
+        {['all', 'new', 'read', 'replied', 'archived'].map(s => (
+          <Button key={s} variant={statusFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(s)}>
+            {s === 'all' ? 'Wszystkie' : s === 'new' ? 'Nowe' : s === 'read' ? 'Przeczytane' : s === 'replied' ? 'Odpowiedziane' : 'Zarchiwizowane'}
+            <Badge variant="secondary" className="ml-2">{s === 'all' ? submissions.length : submissions.filter(x => x.status === s).length}</Badge>
+          </Button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Inbox} title="Brak wiadomości" description="Formularz kontaktowy nie wygenerował jeszcze wiadomości." />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(s => (
+            <Card key={s.id} className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => { setViewing(s); if (s.status === 'new') { fetch(`/api/contact/${s.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'read' }) }).then(() => onChange()) } }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-xs text-muted-foreground">&lt;{s.email}&gt;</span>
+                    {s.status === 'new' && <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Nowa</Badge>}
+                  </div>
+                  <div className="text-sm font-medium mb-1">{s.subject}</div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">{s.message}</p>
+                </div>
+                <div className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(s.createdAt)}</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!viewing} onOpenChange={o => !o && setViewing(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader><DialogTitle>{viewing?.subject}</DialogTitle></DialogHeader>
+          {viewing && (
+            <div className="space-y-3">
+              <div className="text-sm">
+                <div><span className="text-muted-foreground">Od:</span> <strong>{viewing.name}</strong> &lt;{viewing.email}&gt;</div>
+                <div className="text-muted-foreground">{formatDateTime(viewing.createdAt)}</div>
+              </div>
+              <div className="border-t pt-3 whitespace-pre-wrap text-sm">{viewing.message}</div>
+              <div className="flex flex-wrap gap-2 pt-3 border-t">
+                <Button size="sm" asChild>
+                  <a href={`mailto:${viewing.email}?subject=Re: ${encodeURIComponent(viewing.subject)}`}><Mail className="h-3 w-3 mr-1" /> Odpowiedz</a>
+                </Button>
+                <Button size="sm" variant="outline" onClick={async () => { await fetch(`/api/contact/${viewing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'replied' }) }); toast.success('Oznaczono jako odpowiedziane'); setViewing(null); onChange() }}>Oznacz jako odpowiedziane</Button>
+                <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/contact/${viewing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) }); toast.success('Zarchiwizowano'); setViewing(null); onChange() }}>Zarchiwizuj</Button>
+                <Button size="sm" variant="ghost" className="text-destructive ml-auto" onClick={async () => { await fetch(`/api/contact/${viewing.id}`, { method: 'DELETE' }); toast.success('Usunięto'); setViewing(null); onChange() }}><Trash2 className="h-3 w-3 mr-1" /> Usuń</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ==================== Activity Log Section ====================
+function ActivitySection({ logs }: { logs: ActivityLog[] }) {
+  const [entityFilter, setEntityFilter] = useState('all')
+  const entities = useMemo(() => [...new Set(logs.map(l => l.entity))], [logs])
+  const filtered = entityFilter === 'all' ? logs : logs.filter(l => l.entity === entityFilter)
+
+  const actionColors: Record<string, string> = {
+    create: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    update: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    delete: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    login: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+    publish: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Log aktywności" description={`${logs.length} zdarzeń`} />
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant={entityFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setEntityFilter('all')}>Wszystkie</Button>
+        {entities.map(e => (
+          <Button key={e} variant={entityFilter === e ? 'default' : 'outline'} size="sm" onClick={() => setEntityFilter(e)} className="capitalize">{e}</Button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Activity} title="Brak zdarzeń" description="Brak aktywności do wyświetlenia." />
+      ) : (
+        <Card className="p-0 overflow-hidden">
+          <div className="divide-y divide-border">
+            {filtered.map(log => (
+              <div key={log.id} className="flex items-start gap-3 p-4 hover:bg-muted/50">
+                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-semibold uppercase", actionColors[log.action] || 'bg-muted text-muted-foreground')}>
+                  {log.action.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium capitalize">{log.action}</span>
+                    <Badge variant="outline" className="text-[10px]">{log.entity}</Badge>
+                  </div>
+                  {log.details && <p className="text-sm text-muted-foreground mt-0.5">{log.details}</p>}
+                  <div className="text-xs text-muted-foreground mt-1">{log.userName} · {formatDateTime(log.createdAt)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ==================== Search Section ====================
+function SearchSection() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ posts: Post[]; projects: Project[]; pages: Page[] } | null>(null)
+  const [searching, setSearching] = useState(false)
+
+  const doSearch = async () => {
+    if (!query.trim()) { setResults(null); return }
+    setSearching(true)
+    try {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+      const data = await r.json()
+      setResults(data)
+    } catch { toast.error('Błąd wyszukiwania') } finally { setSearching(false) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Wyszukiwarka globalna" description="Szukaj we wszystkich treściach CMS" />
+
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Szukaj..." className="pl-9 text-lg h-12" autoFocus />
+        </div>
+        <Button onClick={doSearch} disabled={searching} size="lg"><FileSearch className="h-4 w-4 mr-2" /> Szukaj</Button>
+      </div>
+
+      {results && (
+        <div className="space-y-6">
+          {results.posts.length === 0 && results.projects.length === 0 && results.pages.length === 0 ? (
+            <EmptyState icon={FileSearch} title="Brak wyników" description={`Nie znaleziono treści dla "${query}".`} />
+          ) : (
+            <>
+              {results.posts.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2"><FileText className="h-4 w-4" /> Wpisy ({results.posts.length})</h3>
+                  <div className="space-y-2">
+                    {results.posts.map(p => (
+                      <Card key={p.id} className="p-3"><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground line-clamp-1">{p.excerpt}</div></Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {results.projects.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2"><FolderKanban className="h-4 w-4" /> Projekty ({results.projects.length})</h3>
+                  <div className="space-y-2">
+                    {results.projects.map(p => (
+                      <Card key={p.id} className="p-3"><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground line-clamp-1">{p.summary}</div></Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {results.pages.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2"><File className="h-4 w-4" /> Strony ({results.pages.length})</h3>
+                  <div className="space-y-2">
+                    {results.pages.map(p => (
+                      <Card key={p.id} className="p-3"><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground">/{p.slug}</div></Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ==================== Users Section ====================
+function UsersSection({ users, onChange }: { users: User[]; onChange: () => void }) {
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState<any>({})
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+
+  const roleColors: Record<string, string> = {
+    admin: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    editor: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    author: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Użytkownicy" description={`${users.length} użytkowników`} action={<Button onClick={() => { setForm({ email: '', name: '', password: '', role: 'editor', bio: '' }); setFormOpen(true) }}><UserPlus className="h-4 w-4 mr-2" /> Dodaj użytkownika</Button>} />
+
+      {users.length === 0 ? (
+        <EmptyState icon={Users} title="Brak użytkowników" description="Dodaj pierwszego użytkownika." />
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Użytkownik</TableHead>
+                <TableHead className="hidden md:table-cell">Rola</TableHead>
+                <TableHead className="hidden lg:table-cell">Utworzono</TableHead>
+                <TableHead className="w-[80px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map(u => (
+                <TableRow key={u.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold">{u.name.charAt(0).toUpperCase()}</div>
+                      <div>
+                        <div className="font-medium">{u.name}</div>
+                        <div className="text-xs text-muted-foreground">{u.email}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell"><span className={cn("text-xs px-2 py-0.5 rounded-full font-medium capitalize", roleColors[u.role])}>{u.role}</span></TableCell>
+                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{formatDate(u.createdAt)}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm({ id: u.id, name: u.name, role: u.role, bio: u.bio || '' }); setFormOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(u)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader><DialogTitle>{form.id ? 'Edytuj użytkownika' : 'Nowy użytkownik'}</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            {!form.id && (
+              <>
+                <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+                <div className="grid gap-2"><Label>Hasło *</Label><Input type="password" value={form.password || ''} onChange={e => setForm({ ...form, password: e.target.value })} /></div>
+              </>
+            )}
+            <div className="grid gap-2"><Label>Nazwa *</Label><Input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="grid gap-2">
+              <Label>Rola</Label>
+              <Select value={form.role || 'editor'} onValueChange={v => setForm({ ...form, role: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrator (pełny dostęp)</SelectItem>
+                  <SelectItem value="editor">Redaktor (treść)</SelectItem>
+                  <SelectItem value="author">Autor (własne wpisy)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.id && (
+              <div className="grid gap-2"><Label>Bio</Label><Textarea rows={3} value={form.bio || ''} onChange={e => setForm({ ...form, bio: e.target.value })} /></div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFormOpen(false)}>Anuluj</Button>
+            <Button onClick={async () => {
+              if (form.id) {
+                await fetch(`/api/users/${form.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, role: form.role, bio: form.bio }) })
+                toast.success('Użytkownik zaktualizowany')
+              } else {
+                if (!form.email?.trim() || !form.password?.trim() || !form.name?.trim()) { toast.error('Wszystkie pola są wymagane'); return }
+                const r = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                if (!r.ok) { toast.error('Błąd: email może być zajęty'); return }
+                toast.success('Użytkownik dodany')
+              }
+              setFormOpen(false); onChange()
+            }}>{form.id ? 'Zapisz' : 'Dodaj'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć użytkownika?</AlertDialogTitle>
+            <AlertDialogDescription>Użytkownik <strong>{deleteTarget?.name}</strong> straci dostęp do panelu.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/users/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Użytkownik usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Card className="p-4 bg-muted/30 border-dashed">
+        <div className="flex items-start gap-3">
+          <Lock className="h-4 w-4 text-muted-foreground mt-0.5" />
+          <div className="text-sm">
+            <div className="font-medium mb-1">Domyślne konto demo</div>
+            <div className="text-muted-foreground">Email: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">admin@example.com</code> · Hasło: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">admin123</code></div>
+            <div className="text-xs text-muted-foreground mt-1">Logowanie dostępne przez API: <code>POST /api/auth</code></div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ==================== Backup Section ====================
+function BackupSection({ counts }: { counts: Record<string, number> }) {
+  const [exporting, setExporting] = useState(false)
+
+  const doExport = async () => {
+    setExporting(true)
+    try {
+      const r = await fetch('/api/backup')
+      const data = await r.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `portfolio-cms-backup-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Kopia zapasowa pobrana')
+    } catch { toast.error('Błąd eksportu') } finally { setExporting(false) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Kopia zapasowa" description="Eksport i import danych CMS" />
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><Download className="h-5 w-5" /></div>
+            <div>
+              <h3 className="font-semibold">Eksport danych</h3>
+              <p className="text-sm text-muted-foreground">Pobierz pełną kopię zapasową jako JSON</p>
+            </div>
+          </div>
+          <div className="text-sm space-y-1 mb-4">
+            <div className="flex justify-between"><span className="text-muted-foreground">Wpisy</span><span className="font-medium">{counts.posts}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Projekty</span><span className="font-medium">{counts.projects}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Strony</span><span className="font-medium">{counts.pages}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Kategorie</span><span className="font-medium">{counts.categories}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Tagi</span><span className="font-medium">{counts.tags}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Komentarze</span><span className="font-medium">{counts.comments}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Media</span><span className="font-medium">{counts.media}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Wiadomości</span><span className="font-medium">{counts.contactSubmissions}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Użytkownicy</span><span className="font-medium">{counts.users}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Logi aktywności</span><span className="font-medium">{counts.activityLogs}</span></div>
+          </div>
+          <Button onClick={doExport} disabled={exporting} className="w-full">
+            <Download className="h-4 w-4 mr-2" /> {exporting ? 'Eksportowanie...' : 'Pobierz kopię zapasową'}
+          </Button>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center"><Database className="h-5 w-5" /></div>
+            <div>
+              <h3 className="font-semibold">Statystyka bazy</h3>
+              <p className="text-sm text-muted-foreground">Podsumowanie danych w systemie</p>
+            </div>
+          </div>
+          <div className="space-y-3 text-sm">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Baza danych</div>
+              <div className="font-medium">Supabase PostgreSQL</div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Schema</div>
+              <div className="font-mono text-sm">portfolio_cms</div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Hosting</div>
+              <div className="font-medium">Vercel · Region: Frankfurt</div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Wersja CMS</div>
+              <div className="font-medium">2.0 · WordPress-like</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-6">
+        <div className="flex items-start gap-3 mb-3">
+          <Rss className="h-5 w-5 text-orange-500 mt-0.5" />
+          <div>
+            <h3 className="font-semibold">SEO i feed</h3>
+            <p className="text-sm text-muted-foreground">Publiczne endpointy dla wyszukiwarek i czytników RSS</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 text-sm">
+          <a href="/api/feed" target="_blank" className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="font-medium flex items-center gap-2"><Rss className="h-3.5 w-3.5 text-orange-500" /> RSS Feed</div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">/api/feed</div>
+          </a>
+          <a href="/api/sitemap" target="_blank" className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="font-medium flex items-center gap-2"><LayoutIcon className="h-3.5 w-3.5" /> Sitemap.xml</div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">/api/sitemap</div>
+          </a>
+          <a href="/api/robots" target="_blank" className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="font-medium flex items-center gap-2"><File className="h-3.5 w-3.5" /> Robots.txt</div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">/api/robots</div>
+          </a>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
 // ==================== Main App ====================
 function CMSApp() {
   const [section, setSection] = useState<Section>('dashboard')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [data, setData] = useState<{ posts: Post[]; projects: Project[]; pages: Page[]; categories: Category[]; comments: Comment[]; media: Media[]; settings: Settings }>({
-    posts: [], projects: [], pages: [], categories: [], comments: [], media: [], settings: {},
+  const [publicView, setPublicView] = useState<PublicView | null>(null)
+  const [data, setData] = useState<{ posts: Post[]; projects: Project[]; pages: Page[]; categories: Category[]; tags: TagType[]; comments: Comment[]; media: Media[]; settings: Settings; contactSubmissions: ContactSubmission[]; activityLogs: ActivityLog[]; users: User[] }>({
+    posts: [], projects: [], pages: [], categories: [], tags: [], comments: [], media: [], settings: {}, contactSubmissions: [], activityLogs: [], users: [],
   })
   const [loading, setLoading] = useState(true)
 
   const fetchAll = useCallback(async () => {
     try {
-      const [postsRes, projectsRes, pagesRes, categoriesRes, commentsRes, mediaRes, settingsRes] = await Promise.all([
+      const [postsRes, projectsRes, pagesRes, categoriesRes, tagsRes, commentsRes, mediaRes, settingsRes, contactRes, activityRes, usersRes] = await Promise.all([
         fetch('/api/posts?status=all').then(r => r.json()).catch(() => []),
         fetch('/api/projects?status=all').then(r => r.json()).catch(() => []),
         fetch('/api/pages').then(r => r.json()).catch(() => []),
         fetch('/api/categories').then(r => r.json()).catch(() => []),
+        fetch('/api/tags').then(r => r.json()).catch(() => []),
         fetch('/api/comments?status=all').then(r => r.json()).catch(() => []),
         fetch('/api/media').then(r => r.json()).catch(() => []),
         fetch('/api/settings').then(r => r.json()).catch(() => ({})),
+        fetch('/api/contact').then(r => r.json()).catch(() => []),
+        fetch('/api/activity?limit=100').then(r => r.json()).catch(() => []),
+        fetch('/api/users').then(r => r.json()).catch(() => []),
       ])
       setData({
         posts: postsRes, projects: projectsRes, pages: pagesRes,
-        categories: categoriesRes, comments: commentsRes, media: mediaRes, settings: settingsRes,
+        categories: categoriesRes, tags: tagsRes, comments: commentsRes,
+        media: mediaRes, settings: settingsRes,
+        contactSubmissions: contactRes, activityLogs: activityRes, users: usersRes,
       })
     } catch (e) {
       console.error(e)
@@ -1343,9 +1917,36 @@ function CMSApp() {
     posts: data.posts.length,
     pages: data.pages.length,
     categories: data.categories.length,
+    tags: data.tags.length,
     comments: data.comments.filter(c => c.status === 'pending').length,
     media: data.media.length,
+    contactSubmissions: data.contactSubmissions.filter(s => s.status === 'new').length,
+    activityLogs: data.activityLogs.length,
+    users: data.users.length,
   }), [data])
+
+  // Public view mode — render public site, with floating "back to admin" button
+  if (publicView !== null) {
+    return (
+      <div className="relative">
+        <PublicSite
+          view={publicView}
+          setView={setPublicView}
+          posts={data.posts}
+          projects={data.projects}
+          pages={data.pages}
+          settings={data.settings}
+        />
+        <Button
+          onClick={() => setPublicView(null)}
+          className="fixed bottom-4 right-4 z-50 shadow-lg"
+          variant="default"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1.5" /> Wróć do panelu
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -1365,8 +1966,8 @@ function CMSApp() {
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Button asChild variant="outline" size="sm">
-                <a href="/" target="_blank"><HomeIcon className="h-3.5 w-3.5 mr-1.5" /> Zobacz stronę</a>
+              <Button variant="outline" size="sm" onClick={() => setPublicView('home')}>
+                <HomeIcon className="h-3.5 w-3.5 mr-1.5" /> Podgląd strony
               </Button>
             </div>
           </div>
@@ -1393,8 +1994,14 @@ function CMSApp() {
                 {section === 'posts' && <PostsSection posts={data.posts} categories={data.categories} onChange={fetchAll} />}
                 {section === 'pages' && <PagesSection pages={data.pages} onChange={fetchAll} />}
                 {section === 'categories' && <CategoriesSection categories={data.categories} onChange={fetchAll} />}
+                {section === 'tags' && <TagsSection tags={data.tags} onChange={fetchAll} />}
                 {section === 'comments' && <CommentsSection comments={data.comments} onChange={fetchAll} />}
+                {section === 'contact' && <ContactSection submissions={data.contactSubmissions} onChange={fetchAll} />}
                 {section === 'media' && <MediaSection media={data.media} onChange={fetchAll} />}
+                {section === 'search' && <SearchSection />}
+                {section === 'activity' && <ActivitySection logs={data.activityLogs} />}
+                {section === 'users' && <UsersSection users={data.users} onChange={fetchAll} />}
+                {section === 'backup' && <BackupSection counts={{ ...counts, contactSubmissions: data.contactSubmissions.length, activityLogs: data.activityLogs.length }} />}
                 {section === 'settings' && <SettingsSection settings={data.settings} onChange={fetchAll} />}
               </motion.div>
             </AnimatePresence>

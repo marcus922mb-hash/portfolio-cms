@@ -1,4 +1,4 @@
-// Prisma schema - WordPress-like CMS
+// Prisma schema - WordPress-like CMS (rozbudowany)
 
 generator client {
   provider = "prisma-client-js"
@@ -12,19 +12,29 @@ datasource db {
 
 // ============ PROJECTS ============
 model Project {
-  id          String   @id @default(cuid())
-  title       String
-  summary     String
-  description String
-  techStack   String
-  demoUrl     String?
-  repoUrl     String?
-  imageUrl    String?
-  status      String   @default("published")
-  featured    Boolean  @default(false)
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  title           String
+  summary         String
+  description     String
+  techStack       String
+  demoUrl         String?
+  repoUrl         String?
+  imageUrl        String?
+  galleryImages   String?  // JSON array of URLs
+  status          String   @default("published")
+  featured        Boolean  @default(false)
+  order           Int      @default(0)
+  clientName      String?
+  projectUrl      String?
+  startDate       DateTime?
+  endDate         DateTime?
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  ogImage         String?
+  viewCount       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@schema("portfolio_cms")
   @@index([status])
@@ -33,22 +43,32 @@ model Project {
 
 // ============ POSTS (Blog) ============
 model Post {
-  id            String    @id @default(cuid())
-  title         String
-  slug          String    @unique
-  excerpt       String
-  content       String    // Markdown
-  featuredImage String?
-  status        String    @default("published") // draft | published
-  authorName    String    @default("Admin")
-  categoryId    String?
-  viewCount     Int       @default(0)
-  publishedAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  title           String
+  slug            String    @unique
+  excerpt         String
+  content         String    // Markdown / MDX
+  featuredImage   String?
+  status          String    @default("published") // draft | published | scheduled
+  authorName      String    @default("Admin")
+  authorId        String?
+  categoryId      String?
+  viewCount       Int       @default(0)
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  ogImage         String?
+  canonicalUrl    String?
+  // Scheduling
+  publishedAt     DateTime?
+  scheduledAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  comments      Comment[]
+  category        Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  comments        Comment[]
+  tags            PostTag[]
+  revisions       Revision[]
 
   @@schema("portfolio_cms")
   @@index([status])
@@ -58,16 +78,21 @@ model Post {
 
 // ============ PAGES (Static) ============
 model Page {
-  id            String    @id @default(cuid())
-  title         String
-  slug          String    @unique
-  content       String    // Markdown
-  featuredImage String?
-  status        String    @default("published")
-  order         Int       @default(0)
-  showInMenu    Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  title           String
+  slug            String    @unique
+  content         String
+  featuredImage   String?
+  status          String    @default("published")
+  order           Int       @default(0)
+  showInMenu      Boolean   @default(true)
+  parentId        String?
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+  ogImage         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@schema("portfolio_cms")
   @@index([status])
@@ -80,6 +105,7 @@ model Category {
   name      String   @unique
   slug      String   @unique
   color     String   @default("#6b7280")
+  parentId  String?
   createdAt DateTime @default(now())
 
   posts     Post[]
@@ -92,22 +118,38 @@ model Tag {
   id        String   @id @default(cuid())
   name      String   @unique
   slug      String   @unique
+  color     String   @default("#6b7280")
   createdAt DateTime @default(now())
 
+  posts     PostTag[]
+
+  @@schema("portfolio_cms")
+}
+
+model PostTag {
+  postId String
+  tagId  String
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
   @@schema("portfolio_cms")
 }
 
 // ============ COMMENTS ============
 model Comment {
-  id        String   @id @default(cuid())
-  postId    String
-  authorName String
+  id          String   @id @default(cuid())
+  postId      String
+  authorName  String
   authorEmail String
-  content   String
-  status    String   @default("pending") // pending | approved | spam
-  createdAt DateTime @default(now())
+  authorUrl   String?
+  content     String
+  status      String   @default("pending") // pending | approved | spam
+  parentId    String?  // for threaded replies
+  ipAddress   String?
+  createdAt   DateTime @default(now())
 
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@schema("portfolio_cms")
   @@index([postId])
@@ -122,10 +164,77 @@ model Media {
   altText   String?
   mimeType  String
   size      Int
+  folder    String   @default("default")
   createdAt DateTime @default(now())
 
   @@schema("portfolio_cms")
   @@index([createdAt])
+  @@index([folder])
+}
+
+// ============ REVISIONS ============
+model Revision {
+  id        String   @id @default(cuid())
+  postId    String
+  title     String
+  excerpt   String
+  content   String
+  createdBy String   @default("Admin")
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@schema("portfolio_cms")
+  @@index([postId])
+  @@index([createdAt])
+}
+
+// ============ ACTIVITY LOG ============
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  userName  String   @default("Admin")
+  action    String   // create | update | delete | login | publish | etc.
+  entity    String   // post | page | project | category | etc.
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@schema("portfolio_cms")
+  @@index([createdAt])
+  @@index([entity])
+}
+
+// ============ CONTACT SUBMISSIONS ============
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String   @default("new") // new | read | replied | archived
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@schema("portfolio_cms")
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ============ USERS ============
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String   // bcrypt hashed
+  role      String   @default("admin") // admin | editor | author
+  avatar    String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@schema("portfolio_cms")
 }
 
 // ============ SETTINGS ============

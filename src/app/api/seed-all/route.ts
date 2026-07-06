@@ -1,14 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import bcrypt from 'bcryptjs'
 
-// POST /api/seed-all - seed all demo data (idempotent)
 export async function POST() {
-  const existingPosts = await db.post.count()
-  const existingCategories = await db.category.count()
-  const existingProjects = await db.project.count()
+  const results: Record<string, number> = {}
 
   // Seed categories
-  if (existingCategories === 0) {
+  if ((await db.category.count()) === 0) {
     await db.category.createMany({
       data: [
         { name: 'Web Development', slug: 'web-development', color: '#10b981' },
@@ -19,14 +17,52 @@ export async function POST() {
       ],
     })
   }
+  results.categories = await db.category.count()
 
-  const categories = await db.category.findMany()
-  const catMap: Record<string, string> = {}
-  for (const c of categories) catMap[c.slug] = c.id
+  // Seed tags
+  if ((await db.tag.count()) === 0) {
+    await db.tag.createMany({
+      data: [
+        { name: 'React', slug: 'react', color: '#61dafb' },
+        { name: 'Next.js', slug: 'nextjs', color: '#000000' },
+        { name: 'TypeScript', slug: 'typescript', color: '#3178c6' },
+        { name: 'Tailwind', slug: 'tailwind', color: '#06b6d4' },
+        { name: 'PostgreSQL', slug: 'postgresql', color: '#336791' },
+        { name: 'Prisma', slug: 'prisma', color: '#2d3748' },
+        { name: 'Vercel', slug: 'vercel', color: '#000000' },
+        { name: 'Supabase', slug: 'supabase', color: '#3ecf8e' },
+      ],
+    })
+  }
+  results.tags = await db.tag.count()
+
+  // Seed admin user
+  if ((await db.user.count()) === 0) {
+    const hashed = await bcrypt.hash('admin123', 10)
+    await db.user.create({
+      data: {
+        email: 'admin@example.com',
+        name: 'Administrator',
+        password: hashed,
+        role: 'admin',
+        bio: 'Główny administrator systemu CMS.',
+      },
+    })
+  }
+  results.users = await db.user.count()
+
+  // Get tag IDs
+  const tags = await db.tag.findMany()
+  const tagMap: Record<string, string> = {}
+  for (const t of tags) tagMap[t.slug] = t.id
 
   // Seed posts
-  if (existingPosts === 0) {
-    await db.post.createMany({
+  if ((await db.post.count()) === 0) {
+    const categories = await db.category.findMany()
+    const catMap: Record<string, string> = {}
+    for (const c of categories) catMap[c.slug] = c.id
+
+    const created = await db.post.createMany({
       data: [
         {
           title: 'Budowa aplikacji Next.js z TypeScript',
@@ -35,18 +71,20 @@ export async function POST() {
           content: '## Wprowadzenie\n\nNext.js to potężny framework React, który pozwala na budowanie aplikacji webowych o wyjątkowej wydajności.\n\n## Dlaczego TypeScript?\n\nTypeScript dodaje statyczne typowanie do JavaScript, co znacząco poprawia jakość kodu.\n\n## Podsumowanie\n\nNext.js + TypeScript to doskonały stack dla nowoczesnych aplikacji.',
           featuredImage: '',
           status: 'published',
-          authorName: 'Admin',
+          authorName: 'Administrator',
           categoryId: catMap['web-development'],
           publishedAt: new Date(),
+          metaTitle: 'Budowa aplikacji Next.js z TypeScript - Przewodnik',
+          metaDescription: 'Kompletny przewodnik po tworzeniu nowoczesnych aplikacji webowych z Next.js 16 i TypeScript.',
         },
         {
-          title: 'AI w codziennym开发 - praktyczne zastosowania',
+          title: 'AI w codziennym development - praktyczne zastosowania',
           slug: 'ai-w-codziennym-dev-praktyczne-zastosowania',
           excerpt: 'Jak sztuczna inteligencja zmienia sposób, w jaki programiści pracują na co dzień.',
           content: '## AI w development\n\nSztuczna inteligencja rewolucjonizuje sposób, w jaki tworzymy oprogramowanie.\n\n## Narzędzia AI\n\n- GitHub Copilot\n- ChatGPT\n- Claude\n\n## Przyszłość\n\nAI będzie coraz bardziej zintegrowane z naszym workflow.',
           featuredImage: '',
           status: 'published',
-          authorName: 'Admin',
+          authorName: 'Administrator',
           categoryId: catMap['ai-ml'],
           publishedAt: new Date(Date.now() - 86400000),
         },
@@ -57,16 +95,36 @@ export async function POST() {
           content: '## PostgreSQL\n\nPostgreSQL to jedna z najpotężniejszych baz danych SQL.\n\n## Prisma ORM\n\nPrisma to nowoczesny ORM dla Node.js i TypeScript.\n\n## Podsumowanie\n\nPołączenie PostgreSQL + Prisma daje świetne rezultaty.',
           featuredImage: '',
           status: 'published',
-          authorName: 'Admin',
+          authorName: 'Administrator',
           categoryId: catMap['tutorials'],
           publishedAt: new Date(Date.now() - 172800000),
         },
       ],
     })
+
+    // Attach tags to posts
+    const allPosts = await db.post.findMany()
+    for (const p of allPosts) {
+      if (p.slug.includes('nextjs') || p.slug.includes('budowa')) {
+        await db.postTag.createMany({
+          data: ['nextjs', 'typescript', 'react'].map(s => ({ postId: p.id, tagId: tagMap[s] })).filter(x => x.tagId),
+        })
+      } else if (p.slug.includes('ai')) {
+        await db.postTag.createMany({
+          data: ['typescript'].map(s => ({ postId: p.id, tagId: tagMap[s] })).filter(x => x.tagId),
+        })
+      } else if (p.slug.includes('postgresql')) {
+        await db.postTag.createMany({
+          data: ['postgresql', 'prisma'].map(s => ({ postId: p.id, tagId: tagMap[s] })).filter(x => x.tagId),
+        })
+      }
+    }
+    results.posts = created.count
   }
+  results.posts = await db.post.count()
 
   // Seed projects
-  if (existingProjects === 0) {
+  if ((await db.project.count()) === 0) {
     await db.project.createMany({
       data: [
         {
@@ -80,6 +138,10 @@ export async function POST() {
           status: 'published',
           featured: true,
           order: 1,
+          clientName: 'Demo Client',
+          projectUrl: 'https://example.com',
+          startDate: new Date('2024-01-01'),
+          endDate: new Date('2024-03-15'),
         },
         {
           title: 'WeatherCast',
@@ -108,10 +170,10 @@ export async function POST() {
       ],
     })
   }
+  results.projects = await db.project.count()
 
   // Seed pages
-  const existingPages = await db.page.count()
-  if (existingPages === 0) {
+  if ((await db.page.count()) === 0) {
     await db.page.createMany({
       data: [
         {
@@ -141,31 +203,65 @@ export async function POST() {
       ],
     })
   }
+  results.pages = await db.page.count()
 
   // Seed settings
-  const existingSettings = await db.setting.count()
-  if (existingSettings === 0) {
+  if ((await db.setting.count()) === 0) {
     await db.setting.createMany({
       data: [
         { key: 'site.title', value: 'Portfolio CMS' },
         { key: 'site.description', value: 'Moje projekty, wpisy i doświadczenia w jednym miejscu.' },
         { key: 'site.author', value: 'Marek Białkowski' },
         { key: 'site.themeColor', value: '#10b981' },
+        { key: 'site.logo', value: '' },
+        { key: 'site.favicon', value: '' },
+        { key: 'site.language', value: 'pl-PL' },
+        { key: 'site.timezone', value: 'Europe/Warsaw' },
+        { key: 'site.footer', value: '© 2026 Portfolio CMS. Wszelkie prawa zastrzeżone.' },
         { key: 'social.github', value: 'https://github.com/marcus922mb-hash' },
         { key: 'social.linkedin', value: '' },
         { key: 'social.twitter', value: '' },
+        { key: 'social.instagram', value: '' },
+        { key: 'social.youtube', value: '' },
+        { key: 'seo.metaTitle', value: 'Portfolio CMS - Projekty, blog i doświadczenia' },
+        { key: 'seo.metaDescription', value: 'Portfolio CMS - moja osobista przestrzeń do dzielenia się projektami, wpisami i wiedzą.' },
+        { key: 'seo.googleAnalytics', value: '' },
+        { key: 'seo.googleSearchConsole', value: '' },
+        { key: 'comments.moderation', value: 'manual' },
+        { key: 'comments.allowReplies', value: 'true' },
+        { key: 'appearance.heroTitle', value: 'Witaj na moim portfolio' },
+        { key: 'appearance.heroSubtitle', value: 'Projekty, wpis i doświadczenia w jednym miejscu.' },
+        { key: 'appearance.heroImage', value: '' },
+        { key: 'appearance.layout', value: 'modern' },
+        { key: 'appearance.showFeatured', value: 'true' },
+        { key: 'appearance.postsPerPage', value: '6' },
       ],
     })
   }
+  results.settings = await db.setting.count()
 
-  return NextResponse.json({
-    success: true,
-    counts: {
-      posts: await db.post.count(),
-      projects: await db.project.count(),
-      categories: await db.category.count(),
-      pages: await db.page.count(),
-      settings: await db.setting.count(),
-    },
-  })
+  // Seed contact submissions
+  if ((await db.contactSubmission.count()) === 0) {
+    await db.contactSubmission.createMany({
+      data: [
+        {
+          name: 'Anna Kowalska',
+          email: 'anna@example.com',
+          subject: 'Zapytanie o współpracę',
+          message: 'Cześć! Chciałabym zapytać o możliwość stworzenia podobnej aplikacji dla mojej firmy.',
+          status: 'new',
+        },
+        {
+          name: 'Piotr Nowak',
+          email: 'piotr@example.com',
+          subject: 'Pytanie techniczne',
+          message: 'Jakiego frameworka użyłeś do budowy TaskFlow?',
+          status: 'read',
+        },
+      ],
+    })
+  }
+  results.contactSubmissions = await db.contactSubmission.count()
+
+  return NextResponse.json({ success: true, counts: results })
 }
