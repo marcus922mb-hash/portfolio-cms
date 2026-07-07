@@ -1,0 +1,2147 @@
+'use client'
+
+import { useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ThemeProvider, useTheme } from 'next-themes'
+import {
+  LayoutDashboard, Folder, FileText, File, Tag, MessageSquare,
+  Image as ImageIcon, Settings, Plus, Search, ExternalLink, Github,
+  Pencil, Trash2, X, Code2, Sparkles, Calendar, Eye, EyeOff, Sun, Moon,
+  Star, Layers, TrendingUp, Users, FolderKanban, ChevronRight, Menu,
+  Save, MessageCircle, Tag as TagIcon, Palette, ArrowUpRight, Mail,
+  Hash, FileEdit, Inbox, Filter, Download, Home as HomeIcon,
+  History, Activity, Rss, Database, Lock, UserPlus, Clock, FileSearch,
+  Layout as LayoutIcon, ArrowLeft, Upload, Loader2,
+}
+from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+import ReactMarkdown from 'react-markdown'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { PublicSite, type PublicView } from '@/components/cms/PublicSite'
+import { MDXEditor, headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles, BlockTypeSelect, CreateLink, InsertImage, InsertTable, codeBlockPlugin, frontmatterPlugin } from '@mdxeditor/editor'
+import '@mdxeditor/editor/style.css'
+
+// ==================== Types ====================
+type Project = {
+  id: string; title: string; summary: string; description: string
+  techStack: string; demoUrl: string | null; repoUrl: string | null
+  imageUrl: string | null; status: string; featured: boolean
+  order: number; clientName?: string | null; projectUrl?: string | null
+  startDate?: string | null; endDate?: string | null
+  metaTitle?: string | null; metaDescription?: string | null; ogImage?: string | null
+  viewCount?: number
+  createdAt: string; updatedAt: string
+}
+
+type Post = {
+  id: string; title: string; slug: string; excerpt: string; content: string
+  featuredImage: string | null; status: string; authorName: string
+  categoryId: string | null; viewCount: number
+  publishedAt: string | null; scheduledAt?: string | null
+  metaTitle?: string | null; metaDescription?: string | null; ogImage?: string | null; canonicalUrl?: string | null
+  createdAt: string; updatedAt: string
+  category?: { id: string; name: string; color: string } | null
+  tags?: { tag: { id: string; name: string; slug: string; color: string } }[]
+  comments?: Comment[]
+  revisions?: Revision[]
+  _count?: { comments: number; revisions: number }
+}
+
+type Page = {
+  id: string; title: string; slug: string; content: string
+  featuredImage: string | null; status: string; order: number
+  showInMenu: boolean
+  metaTitle?: string | null; metaDescription?: string | null; ogImage?: string | null
+  createdAt: string; updatedAt: string
+}
+
+type Category = {
+  id: string; name: string; slug: string; color: string; createdAt: string
+  _count?: { posts: number }
+}
+
+type TagType = {
+  id: string; name: string; slug: string; color: string; createdAt: string
+  _count?: { posts: number }
+}
+
+type Comment = {
+  id: string; postId: string; authorName: string; authorEmail: string
+  content: string; status: string; createdAt: string
+  post?: { id: string; title: string; slug: string }
+}
+
+type Media = {
+  id: string; url: string; filename: string; altText: string | null
+  mimeType: string; size: number; folder: string; createdAt: string
+}
+
+type Revision = {
+  id: string; postId: string; title: string; excerpt: string
+  content: string; createdBy: string; createdAt: string
+}
+
+type ActivityLog = {
+  id: string; userId: string | null; userName: string
+  action: string; entity: string; entityId: string | null
+  details: string | null; ipAddress: string | null; createdAt: string
+}
+
+type ContactSubmission = {
+  id: string; name: string; email: string; subject: string
+  message: string; status: string; createdAt: string
+}
+
+type User = {
+  id: string; email: string; name: string; role: string
+  avatar?: string | null; bio?: string | null; createdAt: string
+}
+
+type Settings = Record<string, string>
+
+type Section = 'dashboard' | 'projects' | 'posts' | 'pages' | 'categories' | 'tags' | 'comments' | 'media' | 'contact' | 'activity' | 'search' | 'users' | 'backup' | 'settings'
+
+// ==================== Helpers ====================
+const emptySubscribe = () => () => {}
+function useMounted() {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false)
+}
+
+function parseTechStack(raw: string): string[] {
+  try { const p = JSON.parse(raw); return Array.isArray(p) ? p : [] } catch { return [] }
+}
+
+function formatDate(iso?: string | null): string {
+  if (!iso) return '—'
+  try { return new Date(iso).toLocaleDateString('pl-PL', { year: 'numeric', month: 'short', day: 'numeric' }) }
+  catch { return '—' }
+}
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return '—'
+  try { return new Date(iso).toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+  catch { return '—' }
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+const ACCENT = [
+  'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+  'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
+  'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20',
+  'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/20',
+  'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20',
+  'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20',
+]
+
+function techBadgeClass(t: string): string {
+  let h = 0
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0
+  return ACCENT[h % ACCENT.length]
+}
+
+// ==================== Theme toggle ====================
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+  const mounted = useMounted()
+  if (!mounted) return <div className="w-9 h-9" />
+  return (
+    <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} aria-label="Zmień motyw">
+      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  )
+}
+
+// ==================== Sidebar ====================
+const NAV: { id: Section; label: string; icon: React.ElementType; group?: string }[] = [
+  { id: 'dashboard', label: 'Pulpit', icon: LayoutDashboard },
+  { id: 'projects', label: 'Projekty', icon: FolderKanban, group: 'Treść' },
+  { id: 'posts', label: 'Wpisy', icon: FileText, group: 'Treść' },
+  { id: 'pages', label: 'Strony', icon: File, group: 'Treść' },
+  { id: 'categories', label: 'Kategorie', icon: Tag, group: 'Treść' },
+  { id: 'tags', label: 'Tagi', icon: TagIcon, group: 'Treść' },
+  { id: 'comments', label: 'Komentarze', icon: MessageSquare, group: 'Interakcje' },
+  { id: 'contact', label: 'Wiadomości', icon: Inbox, group: 'Interakcje' },
+  { id: 'media', label: 'Biblioteka mediów', icon: ImageIcon, group: 'Interakcje' },
+  { id: 'search', label: 'Wyszukiwarka', icon: FileSearch, group: 'Narzędzia' },
+  { id: 'activity', label: 'Log aktywności', icon: Activity, group: 'Narzędzia' },
+  { id: 'users', label: 'Użytkownicy', icon: Users, group: 'System' },
+  { id: 'backup', label: 'Kopia zapasowa', icon: Database, group: 'System' },
+  { id: 'settings', label: 'Ustawienia', icon: Settings, group: 'System' },
+]
+
+function Sidebar({ section, setSection, counts, mobileOpen, setMobileOpen }: {
+  section: Section
+  setSection: (s: Section) => void
+  counts: { posts: number; projects: number; pages: number; comments: number; categories: number; media: number }
+  mobileOpen: boolean
+  setMobileOpen: (b: boolean) => void
+}) {
+  const groups = useMemo(() => {
+    const map: Record<string, typeof NAV> = { _main: [] }
+    for (const item of NAV) {
+      if (!item.group) map._main.push(item)
+      else {
+        if (!map[item.group]) map[item.group] = []
+        map[item.group].push(item)
+      }
+    }
+    return map
+  }, [])
+
+  return (
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setMobileOpen(false)} />
+      )}
+      <aside className={cn(
+        "fixed lg:sticky top-0 left-0 z-50 lg:z-30 w-64 h-screen bg-card border-r border-border flex flex-col transition-transform duration-300 lg:translate-x-0",
+        mobileOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        {/* Logo */}
+        <div className="h-16 flex items-center gap-2.5 px-5 border-b border-border">
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
+            <Code2 className="h-5 w-5" />
+          </div>
+          <div className="leading-tight">
+            <div className="font-semibold text-sm">Portfolio CMS</div>
+            <div className="text-[10px] text-muted-foreground">Panel administracyjny</div>
+          </div>
+          <Button variant="ghost" size="icon" className="ml-auto lg:hidden" onClick={() => setMobileOpen(false)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-4">
+          {groups._main.map(item => (
+            <NavItem key={item.id} item={item} active={section === item.id} onClick={() => { setSection(item.id); setMobileOpen(false) }} count={item.id === 'dashboard' ? undefined : counts[item.id as keyof typeof counts]} />
+          ))}
+          {Object.entries(groups).filter(([k]) => k !== '_main').map(([group, items]) => (
+            <div key={group} className="space-y-1">
+              <div className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{group}</div>
+              {items.map(item => (
+                <NavItem key={item.id} item={item} active={section === item.id} onClick={() => { setSection(item.id); setMobileOpen(false) }} count={counts[item.id as keyof typeof counts]} />
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        {/* Footer */}
+        <div className="border-t border-border p-3">
+          <Button variant="outline" size="sm" className="w-full justify-start" asChild>
+            <a href="/" target="_blank">
+              <HomeIcon className="h-4 w-4 mr-2" /> Zobacz stronę
+              <ExternalLink className="h-3 w-3 ml-auto" />
+            </a>
+          </Button>
+        </div>
+      </aside>
+    </>
+  )
+}
+
+function NavItem({ item, active, onClick, count }: {
+  item: { id: Section; label: string; icon: React.ElementType }
+  active: boolean
+  onClick: () => void
+  count?: number
+}) {
+  const Icon = item.icon
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+        active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="flex-1 text-left">{item.label}</span>
+      {count !== undefined && count > 0 && (
+        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold",
+          active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted-foreground/15 text-muted-foreground"
+        )}>{count}</span>
+      )}
+    </button>
+  )
+}
+
+// ==================== Stat Card ====================
+function StatCard({ label, value, icon, trend, color = 'emerald' }: {
+  label: string; value: number | string; icon: React.ReactNode; trend?: string; color?: string
+}) {
+  const colorMap: Record<string, string> = {
+    emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    rose: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
+    cyan: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
+    violet: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  }
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", colorMap[color])}>{icon}</div>
+        {trend && <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5">
+          <TrendingUp className="h-3 w-3" /> {trend}
+        </span>}
+      </div>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-xs text-muted-foreground mt-1">{label}</div>
+    </Card>
+  )
+}
+
+// ==================== Page Header ====================
+function PageHeader({ title, description, action }: {
+  title: string; description?: string; action?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+// ==================== Empty State ====================
+function EmptyState({ icon: Icon, title, description, action }: {
+  icon: React.ElementType; title: string; description: string; action?: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+        <Icon className="h-8 w-8 text-muted-foreground/50" />
+      </div>
+      <h3 className="text-lg font-semibold mb-1">{title}</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mb-4">{description}</p>
+      {action}
+    </div>
+  )
+}
+
+// ==================== Dashboard ====================
+function Dashboard({ data, onSeed }: {
+  data: { posts: Post[]; projects: Project[]; pages: Page[]; categories: Category[]; comments: Comment[]; media: Media[]; settings: Settings }
+  onSeed: () => Promise<void>
+}) {
+  const recentPosts = data.posts.slice(0, 5)
+  const pendingComments = data.comments.filter(c => c.status === 'pending').slice(0, 5)
+  const featuredProjects = data.projects.filter(p => p.featured)
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Pulpit"
+        description="Przegląd Twojego CMS"
+        action={<Button onClick={onSeed} variant="outline"><Sparkles className="h-4 w-4 mr-2" /> Zapełnij danymi demo</Button>}
+      />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Projekty" value={data.projects.length} icon={<FolderKanban className="h-5 w-5" />} color="emerald" trend={`${featuredProjects.length} wyróżnionych`} />
+        <StatCard label="Wpisy bloga" value={data.posts.length} icon={<FileText className="h-5 w-5" />} color="violet" trend={`${data.posts.filter(p => p.status === 'published').length} opublikowanych`} />
+        <StatCard label="Strony" value={data.pages.length} icon={<File className="h-5 w-5" />} color="cyan" />
+        <StatCard label="Komentarze" value={data.comments.length} icon={<MessageSquare className="h-5 w-5" />} color="amber" trend={`${pendingComments.length} oczekujących`} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Recent posts */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4" /> Ostatnie wpisy</h3>
+          </div>
+          {recentPosts.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Brak wpisów</p>
+          ) : (
+            <div className="space-y-2">
+              {recentPosts.map(post => (
+                <div key={post.id} className="flex items-center gap-3 py-2 border-b last:border-0 border-border/60">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{post.title}</div>
+                    <div className="text-xs text-muted-foreground">{formatDate(post.publishedAt || post.createdAt)}</div>
+                  </div>
+                  {post.category && <Badge variant="secondary" style={{ backgroundColor: post.category.color + '20', color: post.category.color, border: 0 }}>{post.category.name}</Badge>}
+                  <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", post.status === 'published' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300")}>{post.status === 'published' ? 'Opublikowany' : 'Szkic'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* Pending comments */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center gap-2"><MessageCircle className="h-4 w-4" /> Oczekujące komentarze</h3>
+          </div>
+          {pendingComments.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Brak oczekujących komentarzy</p>
+          ) : (
+            <div className="space-y-2">
+              {pendingComments.map(c => (
+                <div key={c.id} className="py-2 border-b last:border-0 border-border/60">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium">{c.authorName}</span>
+                    <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{c.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Posts chart */}
+      <Card className="p-5">
+        <h3 className="font-semibold flex items-center gap-2 mb-4"><TrendingUp className="h-4 w-4" /> Wpisy w ostatnich miesiącach</h3>
+        <div className="h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={(() => {
+              const months: Record<string, number> = {}
+              data.posts.forEach(p => {
+                const d = new Date(p.createdAt)
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                months[key] = (months[key] || 0) + 1
+              })
+              return Object.entries(months).sort().map(([month, count]) => ({ month, count }))
+            })()}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} className="text-muted-foreground" />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} className="text-muted-foreground" />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Featured projects */}
+      {featuredProjects.length > 0 && (
+        <Card className="p-5">
+          <h3 className="font-semibold flex items-center gap-2 mb-4"><Star className="h-4 w-4 text-amber-500" /> Wyróżnione projekty</h3>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {featuredProjects.map(p => (
+              <div key={p.id} className="border rounded-lg p-3">
+                <div className="font-medium text-sm mb-1">{p.title}</div>
+                <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{p.summary}</p>
+                <div className="flex flex-wrap gap-1">
+                  {parseTechStack(p.techStack).slice(0, 3).map(t => (
+                    <span key={t} className={cn("text-[10px] px-1.5 py-0.5 rounded border", techBadgeClass(t))}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ==================== Projects Section ====================
+function ProjectsSection({ projects, onChange }: {
+  projects: Project[]
+  onChange: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all')
+  const [editing, setEditing] = useState<Project | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [viewing, setViewing] = useState<Project | null>(null)
+  const [viewOpen, setViewOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null)
+
+  const filtered = useMemo(() => {
+    let list = [...projects]
+    if (statusFilter !== 'all') list = list.filter(p => p.status === statusFilter)
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(p => p.title.toLowerCase().includes(q) || p.summary.toLowerCase().includes(q))
+    }
+    return list.sort((a, b) => a.order - b.order)
+  }, [projects, search, statusFilter])
+
+  const openNew = () => { setEditing(null); setFormOpen(true) }
+  const openEdit = (p: Project) => { setEditing(p); setFormOpen(true) }
+  const openView = (p: Project) => { setViewing(p); setViewOpen(true) }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Projekty"
+        description={`${projects.length} ${projects.length === 1 ? 'projekt' : 'projektów'} w portfolio`}
+        action={<Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Dodaj projekt</Button>}
+      />
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj projektów..." className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as typeof statusFilter)}>
+          <SelectTrigger className="w-[160px]"><Filter className="h-3.5 w-3.5 mr-1.5" /><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Wszystkie</SelectItem>
+            <SelectItem value="published">Opublikowane</SelectItem>
+            <SelectItem value="draft">Szkice</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={FolderKanban} title="Brak projektów" description="Dodaj swój pierwszy projekt do portfolio." action={<Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Dodaj pierwszy projekt</Button>} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <AnimatePresence mode="popLayout">
+            {filtered.map(p => (
+              <ProjectCard key={p.id} project={p} onView={() => openView(p)} onEdit={() => openEdit(p)} onDelete={() => setDeleteTarget(p)} />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      <ProjectFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} onSave={async (data) => {
+        if (editing) {
+          const r = await fetch(`/api/projects/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          if (!r.ok) throw new Error('update')
+          toast.success('Projekt zaktualizowany')
+        } else {
+          const r = await fetch('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          if (!r.ok) throw new Error('create')
+          toast.success('Projekt dodany')
+        }
+        onChange()
+      }} />
+
+      <ProjectDetailDialog project={viewing} open={viewOpen} onOpenChange={setViewOpen} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć projekt?</AlertDialogTitle>
+            <AlertDialogDescription>Czy na pewno chcesz usunąć <strong>{deleteTarget?.title}</strong>? Tej operacji nie można cofnąć.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/projects/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Projekt usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function ProjectCard({ project, onView, onEdit, onDelete }: {
+  project: Project; onView: () => void; onEdit: () => void; onDelete: () => void
+}) {
+  const techs = parseTechStack(project.techStack)
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}>
+      <Card className="group overflow-hidden h-full flex flex-col p-0 hover:shadow-md transition-shadow">
+        <button onClick={onView} className="relative w-full aspect-[16/9] overflow-hidden bg-muted text-left">
+          {project.imageUrl ? (
+            <img src={project.imageUrl} alt={project.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center"><Layers className="h-10 w-10 text-muted-foreground/30" /></div>
+          )}
+          <div className="absolute top-3 left-3 flex gap-2">
+            {project.featured && <Badge className="bg-amber-500/90 text-white border-0"><Star className="h-3 w-3 mr-1 fill-current" /> Wyróżniony</Badge>}
+            {project.status === 'draft' && <Badge className="bg-zinc-900/80 text-white border-0"><EyeOff className="h-3 w-3 mr-1" /> Szkic</Badge>}
+          </div>
+        </button>
+        <div className="flex flex-col flex-1 p-4 gap-2">
+          <div className="flex items-start justify-between gap-2">
+            <button onClick={onView} className="text-left flex-1">
+              <h3 className="font-semibold text-base leading-tight group-hover:text-primary transition-colors">{project.title}</h3>
+            </button>
+            <div className="flex gap-1 shrink-0">
+              {project.demoUrl && <a href={project.demoUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground p-1"><ExternalLink className="h-4 w-4" /></a>}
+              {project.repoUrl && <a href={project.repoUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground p-1"><Github className="h-4 w-4" /></a>}
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground line-clamp-2">{project.summary}</p>
+          {techs.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-auto pt-2">
+              {techs.slice(0, 3).map(t => <span key={t} className={cn("text-[10px] px-1.5 py-0.5 rounded border font-medium", techBadgeClass(t))}>{t}</span>)}
+              {techs.length > 3 && <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">+{techs.length - 3}</span>}
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-3 mt-1 border-t border-border/60">
+            <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDate(project.createdAt)}</span>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit}><Pencil className="h-3.5 w-3.5" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></Button>
+            </div>
+          </div>
+        </div>
+      </Card>
+    </motion.div>
+  )
+}
+
+function ProjectFormDialog({ open, onOpenChange, initial, onSave }: {
+  open: boolean; onOpenChange: (b: boolean) => void; initial: Project | null; onSave: (d: any) => Promise<void>
+}) {
+  const [form, setForm] = useState<any>({})
+  const [techInput, setTechInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (initial) {
+      setForm({ title: initial.title, summary: initial.summary, description: initial.description, techStack: parseTechStack(initial.techStack), demoUrl: initial.demoUrl ?? '', repoUrl: initial.repoUrl ?? '', imageUrl: initial.imageUrl ?? '', status: initial.status, featured: initial.featured, order: initial.order })
+    } else {
+      setForm({ title: '', summary: '', description: '', techStack: [], demoUrl: '', repoUrl: '', imageUrl: '', status: 'published', featured: false, order: 0 })
+    }
+    setTechInput('')
+  }, [initial, open])
+
+  const addTech = () => { const t = techInput.trim().replace(/,$/, ''); if (t && !form.techStack.includes(t)) { setForm({ ...form, techStack: [...form.techStack, t] }); setTechInput('') } }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{initial ? 'Edytuj projekt' : 'Dodaj nowy projekt'}</DialogTitle>
+          <DialogDescription>{initial ? 'Zmień dane projektu' : 'Wypełnij formularz, aby dodać projekt'}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-2">
+          <div className="grid gap-2"><Label>Tytuł *</Label><Input value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} /></div>
+          <div className="grid gap-2"><Label>Podsumowanie *</Label><Input value={form.summary || ''} onChange={e => setForm({ ...form, summary: e.target.value })} /></div>
+          <div className="grid gap-2"><Label>Opis (Markdown)</Label><Textarea rows={5} value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} className="font-mono text-sm" /></div>
+          <div className="grid gap-2">
+            <Label>Stack technologiczny</Label>
+            <div className="flex gap-2">
+              <Input value={techInput} onChange={e => setTechInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTech() } }} placeholder="Wpisz i Enter" />
+              <Button type="button" variant="secondary" onClick={addTech}><Plus className="h-4 w-4" /></Button>
+            </div>
+            {form.techStack?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {form.techStack.map((t: string) => <Badge key={t} variant="secondary" className="gap-1">{t}<button onClick={() => setForm({ ...form, techStack: form.techStack.filter((x: string) => x !== t) })}><X className="h-3 w-3" /></button></Badge>)}
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2"><Label>URL demo</Label><Input value={form.demoUrl || ''} onChange={e => setForm({ ...form, demoUrl: e.target.value })} /></div>
+            <div className="grid gap-2"><Label>URL repo</Label><Input value={form.repoUrl || ''} onChange={e => setForm({ ...form, repoUrl: e.target.value })} /></div>
+          </div>
+          <div className="grid gap-2"><Label>URL obrazka</Label><Input value={form.imageUrl || ''} onChange={e => setForm({ ...form, imageUrl: e.target.value })} /></div>
+          <div className="flex justify-between items-end pt-2 border-t">
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select value={form.status || 'published'} onValueChange={v => setForm({ ...form, status: v })}>
+                <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="published"><span className="flex items-center gap-2"><Eye className="h-4 w-4" /> Opublikowany</span></SelectItem>
+                  <SelectItem value="draft"><span className="flex items-center gap-2"><EyeOff className="h-4 w-4" /> Szkic</span></SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2 pb-2">
+              <Switch id="featured" checked={form.featured || false} onCheckedChange={c => setForm({ ...form, featured: c })} />
+              <Label htmlFor="featured" className="flex items-center gap-1.5 cursor-pointer"><Star className="h-4 w-4 text-amber-500" /> Wyróżnij</Label>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Anuluj</Button>
+          <Button disabled={saving} onClick={async () => {
+            if (!form.title?.trim() || !form.summary?.trim()) { toast.error('Tytuł i podsumowanie są wymagane'); return }
+            setSaving(true)
+            try { await onSave(form); onOpenChange(false) } catch { toast.error('Błąd zapisu') } finally { setSaving(false) }
+          }}>{saving ? 'Zapisywanie...' : initial ? 'Zapisz zmiany' : 'Dodaj projekt'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ProjectDetailDialog({ project, open, onOpenChange }: {
+  project: Project | null; open: boolean; onOpenChange: (b: boolean) => void
+}) {
+  if (!project) return null
+  const techs = parseTechStack(project.techStack)
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="text-2xl">{project.title}</DialogTitle><DialogDescription className="text-base">{project.summary}</DialogDescription></DialogHeader>
+        {project.imageUrl && <div className="relative w-full aspect-[16/9] rounded-lg overflow-hidden border bg-muted"><img src={project.imageUrl} alt={project.title} className="w-full h-full object-cover" onError={e => (e.target as HTMLImageElement).style.display = 'none'} /></div>}
+        {techs.length > 0 && <div className="flex flex-wrap gap-2">{techs.map(t => <span key={t} className={cn("text-xs px-2.5 py-1 rounded-md border font-medium", techBadgeClass(t))}>{t}</span>)}</div>}
+        {project.description && <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{project.description}</ReactMarkdown></div>}
+        <div className="flex flex-wrap gap-2 pt-4 border-t">
+          {project.demoUrl && <Button asChild size="sm"><a href={project.demoUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4 mr-1.5" /> Demo</a></Button>}
+          {project.repoUrl && <Button asChild size="sm" variant="outline"><a href={project.repoUrl} target="_blank" rel="noopener noreferrer"><Github className="h-4 w-4 mr-1.5" /> Kod</a></Button>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ==================== Posts Section ====================
+function PostsSection({ posts, categories, onChange }: {
+  posts: Post[]; categories: Category[]; onChange: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [editing, setEditing] = useState<Post | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [viewing, setViewing] = useState<Post | null>(null)
+  const [viewOpen, setViewOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Post | null>(null)
+
+  const filtered = useMemo(() => {
+    let list = [...posts]
+    if (statusFilter !== 'all') list = list.filter(p => p.status === statusFilter)
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      list = list.filter(p => p.title.toLowerCase().includes(q) || p.excerpt.toLowerCase().includes(q))
+    }
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }, [posts, search, statusFilter])
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Wpisy" description={`${posts.length} wpisów na blogu`} action={<Button onClick={() => { setEditing(null); setFormOpen(true) }}><Plus className="h-4 w-4 mr-2" /> Dodaj wpis</Button>} />
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Szukaj wpisów..." className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Wszystkie</SelectItem>
+            <SelectItem value="published">Opublikowane</SelectItem>
+            <SelectItem value="draft">Szkice</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={FileText} title="Brak wpisów" description="Dodaj swój pierwszy wpis na bloga." action={<Button onClick={() => { setEditing(null); setFormOpen(true) }}><Plus className="h-4 w-4 mr-2" /> Dodaj pierwszy wpis</Button>} />
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tytuł</TableHead>
+                <TableHead className="hidden md:table-cell">Kategoria</TableHead>
+                <TableHead className="hidden lg:table-cell">Status</TableHead>
+                <TableHead className="hidden lg:table-cell">Data</TableHead>
+                <TableHead className="hidden md:table-cell text-right">Komentarze</TableHead>
+                <TableHead className="w-[80px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map(post => (
+                <TableRow key={post.id} className="cursor-pointer" onClick={() => { setViewing(post); setViewOpen(true) }}>
+                  <TableCell className="font-medium">
+                    <div className="line-clamp-1">{post.title}</div>
+                    <div className="text-xs text-muted-foreground line-clamp-1 font-normal">{post.excerpt}</div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {post.category && <Badge variant="secondary" style={{ backgroundColor: post.category.color + '20', color: post.category.color, border: 0 }}>{post.category.name}</Badge>}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", post.status === 'published' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300")}>{post.status === 'published' ? 'Opublikowany' : 'Szkic'}</span>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{formatDate(post.publishedAt || post.createdAt)}</TableCell>
+                  <TableCell className="hidden md:table-cell text-right text-sm">{post._count?.comments || 0}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(post); setFormOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(post)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <PostFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} categories={categories} onSave={async (data) => {
+        if (editing) {
+          const r = await fetch(`/api/posts/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          if (!r.ok) throw new Error('update')
+          toast.success('Wpis zaktualizowany')
+        } else {
+          const r = await fetch('/api/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          if (!r.ok) throw new Error('create')
+          toast.success('Wpis dodany')
+        }
+        onChange()
+      }} />
+
+      <PostDetailDialog post={viewing} open={viewOpen} onOpenChange={setViewOpen} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć wpis?</AlertDialogTitle>
+            <AlertDialogDescription>Czy na pewno chcesz usunąć <strong>{deleteTarget?.title}</strong>?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/posts/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Wpis usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function PostFormDialog({ open, onOpenChange, initial, categories, onSave }: {
+  open: boolean; onOpenChange: (b: boolean) => void; initial: Post | null; categories: Category[]; onSave: (d: any) => Promise<void>
+}) {
+  const [form, setForm] = useState<any>({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (initial) {
+      setForm({ title: initial.title, slug: initial.slug, excerpt: initial.excerpt, content: initial.content, featuredImage: initial.featuredImage || '', status: initial.status, authorName: initial.authorName, categoryId: initial.categoryId || '' })
+    } else {
+      setForm({ title: '', slug: '', excerpt: '', content: '', featuredImage: '', status: 'published', authorName: 'Admin', categoryId: '' })
+    }
+  }, [initial, open])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{initial ? 'Edytuj wpis' : 'Dodaj nowy wpis'}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-2">
+          <div className="grid gap-2">
+            <Label>Tytuł *</Label>
+            <Input value={form.title || ''} onChange={e => {
+              const v = e.target.value
+              setForm({ ...form, title: v, slug: form.slug || slugify(v) })
+            }} />
+          </div>
+          <div className="grid gap-2"><Label>Slug (URL)</Label><Input value={form.slug || ''} onChange={e => setForm({ ...form, slug: e.target.value })} placeholder="auto-generowany z tytułu" /></div>
+          <div className="grid gap-2"><Label>Zajawka *</Label><Textarea rows={2} value={form.excerpt || ''} onChange={e => setForm({ ...form, excerpt: e.target.value })} placeholder="Krótki opis wpisu" /></div>
+          <div className="grid gap-2">
+            <Label>Treść (Markdown)</Label>
+            <MDXEditorField value={form.content || ''} onChange={v => setForm({ ...form, content: v })} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label>Kategoria</Label>
+              <Select value={form.categoryId || 'none'} onValueChange={v => setForm({ ...form, categoryId: v === 'none' ? '' : v })}>
+                <SelectTrigger><SelectValue placeholder="Brak kategorii" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Brak —</SelectItem>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Status</Label>
+              <Select value={form.status || 'published'} onValueChange={v => setForm({ ...form, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="published">Opublikowany</SelectItem>
+                  <SelectItem value="draft">Szkic</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2"><Label>Autor</Label><Input value={form.authorName || ''} onChange={e => setForm({ ...form, authorName: e.target.value })} /></div>
+            <div className="grid gap-2"><Label>URL obrazka</Label><Input value={form.featuredImage || ''} onChange={e => setForm({ ...form, featuredImage: e.target.value })} /></div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Anuluj</Button>
+          <Button disabled={saving} onClick={async () => {
+            if (!form.title?.trim() || !form.excerpt?.trim()) { toast.error('Tytuł i zajawka są wymagane'); return }
+            setSaving(true)
+            try { await onSave(form); onOpenChange(false) } catch { toast.error('Błąd zapisu') } finally { setSaving(false) }
+          }}>{saving ? 'Zapisywanie...' : initial ? 'Zapisz zmiany' : 'Dodaj wpis'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PostDetailDialog({ post, open, onOpenChange }: {
+  post: Post | null; open: boolean; onOpenChange: (b: boolean) => void
+}) {
+  if (!post) return null
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-2xl">{post.title}</DialogTitle>
+          <DialogDescription className="text-base">{post.excerpt}</DialogDescription>
+        </DialogHeader>
+        {post.featuredImage && <div className="relative w-full aspect-[16/9] rounded-lg overflow-hidden border bg-muted"><img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover" onError={e => (e.target as HTMLImageElement).style.display = 'none'} /></div>}
+        <div className="flex items-center gap-3 text-sm">
+          {post.category && <Badge variant="secondary" style={{ backgroundColor: post.category.color + '20', color: post.category.color, border: 0 }}>{post.category.name}</Badge>}
+          <span className="text-muted-foreground">Autor: {post.authorName}</span>
+          <span className="text-muted-foreground">·</span>
+          <span className="text-muted-foreground">{formatDate(post.publishedAt || post.createdAt)}</span>
+        </div>
+        {post.content && <div className="prose prose-sm dark:prose-invert max-w-none"><ReactMarkdown>{post.content}</ReactMarkdown></div>}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ==================== Pages Section ====================
+function PagesSection({ pages, onChange }: { pages: Page[]; onChange: () => void }) {
+  const [editing, setEditing] = useState<Page | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Page | null>(null)
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Strony" description={`${pages.length} stron statycznych`} action={<Button onClick={() => { setEditing(null); setFormOpen(true) }}><Plus className="h-4 w-4 mr-2" /> Dodaj stronę</Button>} />
+
+      {pages.length === 0 ? (
+        <EmptyState icon={File} title="Brak stron" description="Dodaj swoją pierwszą stronę statyczną." action={<Button onClick={() => { setEditing(null); setFormOpen(true) }}><Plus className="h-4 w-4 mr-2" /> Dodaj pierwszą stronę</Button>} />
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Tytuł</TableHead>
+                <TableHead className="hidden md:table-cell">Slug</TableHead>
+                <TableHead className="hidden lg:table-cell">Status</TableHead>
+                <TableHead className="hidden md:table-cell">W menu</TableHead>
+                <TableHead className="w-[80px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pages.map(page => (
+                <TableRow key={page.id}>
+                  <TableCell className="font-medium">{page.title}</TableCell>
+                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">/{page.slug}</TableCell>
+                  <TableCell className="hidden lg:table-cell"><span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", page.status === 'published' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300")}>{page.status === 'published' ? 'Opublikowana' : 'Szkic'}</span></TableCell>
+                  <TableCell className="hidden md:table-cell">{page.showInMenu ? <Badge variant="secondary">Tak</Badge> : <span className="text-xs text-muted-foreground">Nie</span>}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(page); setFormOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(page)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <PageFormDialog open={formOpen} onOpenChange={setFormOpen} initial={editing} onSave={async (data) => {
+        if (editing) {
+          await fetch(`/api/pages/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          toast.success('Strona zaktualizowana')
+        } else {
+          await fetch('/api/pages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+          toast.success('Strona dodana')
+        }
+        onChange()
+      }} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć stronę?</AlertDialogTitle>
+            <AlertDialogDescription>Czy na pewno chcesz usunąć <strong>{deleteTarget?.title}</strong>?</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/pages/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Strona usunięta')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function PageFormDialog({ open, onOpenChange, initial, onSave }: {
+  open: boolean; onOpenChange: (b: boolean) => void; initial: Page | null; onSave: (d: any) => Promise<void>
+}) {
+  const [form, setForm] = useState<any>({})
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (initial) {
+      setForm({ title: initial.title, slug: initial.slug, content: initial.content, featuredImage: initial.featuredImage || '', status: initial.status, order: initial.order, showInMenu: initial.showInMenu })
+    } else {
+      setForm({ title: '', slug: '', content: '', featuredImage: '', status: 'published', order: 0, showInMenu: true })
+    }
+  }, [initial, open])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{initial ? 'Edytuj stronę' : 'Dodaj nową stronę'}</DialogTitle></DialogHeader>
+        <div className="grid gap-4 py-2">
+          <div className="grid gap-2"><Label>Tytuł *</Label><Input value={form.title || ''} onChange={e => { const v = e.target.value; setForm({ ...form, title: v, slug: form.slug || slugify(v) }) }} /></div>
+          <div className="grid gap-2"><Label>Slug (URL)</Label><Input value={form.slug || ''} onChange={e => setForm({ ...form, slug: e.target.value })} /></div>
+          <div className="grid gap-2"><Label>Treść (Markdown) *</Label><MDXEditorField value={form.content || ''} onChange={v => setForm({ ...form, content: v })} /></div>
+          <div className="grid gap-2"><Label>URL obrazka</Label><Input value={form.featuredImage || ''} onChange={e => setForm({ ...form, featuredImage: e.target.value })} /></div>
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center gap-4">
+              <div className="grid gap-2">
+                <Label>Status</Label>
+                <Select value={form.status || 'published'} onValueChange={v => setForm({ ...form, status: v })}>
+                  <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="published">Opublikowana</SelectItem>
+                    <SelectItem value="draft">Szkic</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Kolejność</Label>
+                <Input type="number" value={form.order || 0} onChange={e => setForm({ ...form, order: parseInt(e.target.value) || 0 })} className="w-[80px]" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pb-2">
+              <Switch id="menu" checked={form.showInMenu ?? true} onCheckedChange={c => setForm({ ...form, showInMenu: c })} />
+              <Label htmlFor="menu" className="cursor-pointer">Pokaż w menu</Label>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Anuluj</Button>
+          <Button disabled={saving} onClick={async () => {
+            if (!form.title?.trim() || !form.content?.trim()) { toast.error('Tytuł i treść są wymagane'); return }
+            setSaving(true)
+            try { await onSave(form); onOpenChange(false) } catch { toast.error('Błąd zapisu') } finally { setSaving(false) }
+          }}>{saving ? 'Zapisywanie...' : initial ? 'Zapisz zmiany' : 'Dodaj stronę'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ==================== Categories Section ====================
+function CategoriesSection({ categories, onChange }: { categories: Category[]; onChange: () => void }) {
+  const [editing, setEditing] = useState<Category | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Category | null>(null)
+  const [form, setForm] = useState<any>({})
+
+  const open = (c: Category | null) => {
+    setEditing(c)
+    setForm(c ? { name: c.name, color: c.color } : { name: '', color: '#6b7280' })
+    setFormOpen(true)
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Kategorie" description={`${categories.length} kategorii`} action={<Button onClick={() => open(null)}><Plus className="h-4 w-4 mr-2" /> Dodaj kategorię</Button>} />
+
+      {categories.length === 0 ? (
+        <EmptyState icon={Tag} title="Brak kategorii" description="Dodaj pierwszą kategorię dla wpisów." action={<Button onClick={() => open(null)}><Plus className="h-4 w-4 mr-2" /> Dodaj kategorię</Button>} />
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {categories.map(c => (
+            <Card key={c.id} className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: c.color }} />
+                  <h3 className="font-semibold">{c.name}</h3>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => open(c)}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(c)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Hash className="h-3 w-3" /> /{c.slug}
+                <span className="ml-auto">{c._count?.posts || 0} wpisów</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader><DialogTitle>{editing ? 'Edytuj kategorię' : 'Nowa kategoria'}</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2"><Label>Nazwa *</Label><Input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="grid gap-2">
+              <Label>Kolor</Label>
+              <div className="flex gap-2 items-center">
+                <Input type="color" value={form.color || '#6b7280'} onChange={e => setForm({ ...form, color: e.target.value })} className="w-16 h-10 p-1" />
+                <Input value={form.color || ''} onChange={e => setForm({ ...form, color: e.target.value })} className="font-mono" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFormOpen(false)}>Anuluj</Button>
+            <Button onClick={async () => {
+              if (!form.name?.trim()) { toast.error('Nazwa jest wymagana'); return }
+              if (editing) {
+                await fetch(`/api/categories/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                toast.success('Kategoria zaktualizowana')
+              } else {
+                await fetch('/api/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                toast.success('Kategoria dodana')
+              }
+              setFormOpen(false); onChange()
+            }}>{editing ? 'Zapisz' : 'Dodaj'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć kategorię?</AlertDialogTitle>
+            <AlertDialogDescription>Wpisy w tej kategorii pozostaną, ale stracą przypisanie.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/categories/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Kategoria usunięta')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+// ==================== Comments Section ====================
+function CommentsSection({ comments, onChange }: { comments: Comment[]; onChange: () => void }) {
+  const [statusFilter, setStatusFilter] = useState('all')
+  const filtered = useMemo(() => statusFilter === 'all' ? comments : comments.filter(c => c.status === statusFilter), [comments, statusFilter])
+
+  const setStatus = async (c: Comment, status: 'pending' | 'approved' | 'spam') => {
+    await fetch(`/api/comments/${c.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
+    toast.success(`Komentarz oznaczony jako ${status}`)
+    onChange()
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Komentarze" description={`${comments.length} komentarzy`} />
+
+      <div className="flex gap-2">
+        {['all', 'pending', 'approved', 'spam'].map(s => (
+          <Button key={s} variant={statusFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(s)}>
+            {s === 'all' ? 'Wszystkie' : s === 'pending' ? 'Oczekujące' : s === 'approved' ? 'Zatwierdzone' : 'Spam'}
+            <Badge variant="secondary" className="ml-2">
+              {s === 'all' ? comments.length : comments.filter(c => c.status === s).length}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Inbox} title="Brak komentarzy" description="Nie ma jeszcze komentarzy w tej kategorii." />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(c => (
+            <Card key={c.id} className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold shrink-0">{c.authorName.charAt(0).toUpperCase()}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm">{c.authorName}</span>
+                    {c.authorEmail && <span className="text-xs text-muted-foreground">&lt;{c.authorEmail}&gt;</span>}
+                    <span className="text-xs text-muted-foreground">· {formatDateTime(c.createdAt)}</span>
+                    {c.status !== 'approved' && <Badge variant="secondary" className={cn('ml-auto', c.status === 'pending' && 'bg-amber-500/10 text-amber-700 dark:text-amber-300', c.status === 'spam' && 'bg-rose-500/10 text-rose-700 dark:text-rose-300')}>{c.status}</Badge>}
+                  </div>
+                  <p className="text-sm mb-2">{c.content}</p>
+                  {c.post && <p className="text-xs text-muted-foreground">↳ <span className="font-medium">{c.post.title}</span></p>}
+                  <div className="flex gap-2 mt-3">
+                    {c.status !== 'approved' && <Button size="sm" variant="outline" onClick={() => setStatus(c, 'approved')}><Eye className="h-3 w-3 mr-1" /> Zatwierdź</Button>}
+                    {c.status !== 'pending' && <Button size="sm" variant="outline" onClick={() => setStatus(c, 'pending')}>Oznacz jako oczekujący</Button>}
+                    {c.status !== 'spam' && <Button size="sm" variant="outline" onClick={() => setStatus(c, 'spam')}><X className="h-3 w-3 mr-1" /> Spam</Button>}
+                    <Button size="sm" variant="ghost" className="text-destructive ml-auto" onClick={async () => {
+                      await fetch(`/api/comments/${c.id}`, { method: 'DELETE' })
+                      toast.success('Komentarz usunięty')
+                      onChange()
+                    }}><Trash2 className="h-3 w-3 mr-1" /> Usuń</Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ==================== Media Section ====================
+function MediaSection({ media, onChange }: { media: Media[]; onChange: () => void }) {
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState<any>({})
+  const [deleteTarget, setDeleteTarget] = useState<Media | null>(null)
+  const [uploadMode, setUploadMode] = useState<'url' | 'file'>('url')
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileUpload(file: File) {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const alt = file.name.replace(/\.[^.]+$/, '')
+      formData.append('altText', alt)
+      const res = await fetch('/api/media', { method: 'POST', body: formData })
+      if (!res.ok) throw new Error('Upload failed')
+      toast.success('Plik przesłany')
+      onChange()
+    } catch {
+      toast.error('Nie udało się przesłać pliku')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Biblioteka mediów" description={`${media.length} plików`} action={
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf,.doc,.docx,.mp4,.webm"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0]
+              if (file) handleFileUpload(file)
+              e.target.value = ''
+            }}
+          />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+            Prześlij plik
+          </Button>
+          <Button onClick={() => { setForm({ url: '', filename: '', altText: '', mimeType: 'image/*', size: 0 }); setUploadMode('url'); setFormOpen(true) }}>
+            <Plus className="h-4 w-4 mr-2" /> Dodaj URL
+          </Button>
+        </div>
+      } />
+
+      {media.length === 0 ? (
+        <EmptyState icon={ImageIcon} title="Brak mediów" description="Dodaj pierwszy plik do biblioteki mediów." action={
+          <Button onClick={() => fileInputRef.current?.click()}><Upload className="h-4 w-4 mr-2" /> Prześlij plik</Button>
+        } />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {media.map(m => (
+            <Card key={m.id} className="group overflow-hidden p-0">
+              <div className="aspect-square bg-muted relative">
+                {m.mimeType.startsWith('image/') ? (
+                  <img src={m.url} alt={m.altText || m.filename} className="w-full h-full object-cover" onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center"><File className="h-10 w-10 text-muted-foreground/40" /></div>
+                )}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <Button size="icon" variant="secondary" className="h-8 w-8" onClick={async () => {
+                    await navigator.clipboard.writeText(m.url)
+                    toast.success('URL skopiowany')
+                  }}><Download className="h-3.5 w-3.5" /></Button>
+                  <Button size="icon" variant="secondary" className="h-8 w-8 text-destructive" onClick={() => setDeleteTarget(m)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+              <div className="p-2">
+                <div className="text-xs font-medium truncate">{m.filename}</div>
+                <div className="text-[10px] text-muted-foreground">{(m.size / 1024).toFixed(1)} KB</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader><DialogTitle>Dodaj media przez URL</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2"><Label>URL pliku *</Label><Input value={form.url || ''} onChange={e => setForm({ ...form, url: e.target.value, filename: form.filename || e.target.value.split('/').pop() || '' })} placeholder="https://..." /></div>
+            <div className="grid gap-2"><Label>Nazwa pliku *</Label><Input value={form.filename || ''} onChange={e => setForm({ ...form, filename: e.target.value })} /></div>
+            <div className="grid gap-2"><Label>Tekst alternatywny</Label><Input value={form.altText || ''} onChange={e => setForm({ ...form, altText: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2"><Label>Typ MIME</Label><Input value={form.mimeType || 'image/*'} onChange={e => setForm({ ...form, mimeType: e.target.value })} /></div>
+              <div className="grid gap-2"><Label>Rozmiar (bytes)</Label><Input type="number" value={form.size || 0} onChange={e => setForm({ ...form, size: parseInt(e.target.value) || 0 })} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFormOpen(false)}>Anuluj</Button>
+            <Button onClick={async () => {
+              if (!form.url?.trim() || !form.filename?.trim()) { toast.error('URL i nazwa są wymagane'); return }
+              await fetch('/api/media', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+              toast.success('Media dodane')
+              setFormOpen(false); onChange()
+            }}>Dodaj</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć plik?</AlertDialogTitle>
+            <AlertDialogDescription>Plik zostanie usunięty z biblioteki mediów.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/media/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Plik usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+// ==================== Settings Section ====================
+function SettingsSection({ settings, onChange }: { settings: Settings; onChange: () => void }) {
+  const [form, setForm] = useState<Settings>(settings)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => setForm(settings), [settings])
+
+  const fields: { group: string; items: { key: string; label: string; type?: 'text' | 'color' | 'textarea' }[] }[] = [
+    {
+      group: 'Ogólne',
+      items: [
+        { key: 'site.title', label: 'Tytuł strony' },
+        { key: 'site.description', label: 'Opis strony', type: 'textarea' },
+        { key: 'site.author', label: 'Autor' },
+        { key: 'site.themeColor', label: 'Kolor motywu', type: 'color' },
+      ],
+    },
+    {
+      group: 'Media społecznościowe',
+      items: [
+        { key: 'social.github', label: 'GitHub URL' },
+        { key: 'social.linkedin', label: 'LinkedIn URL' },
+        { key: 'social.twitter', label: 'Twitter URL' },
+      ],
+    },
+  ]
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Ustawienia" description="Konfiguracja Twojego CMS" action={
+        <Button disabled={saving} onClick={async () => {
+          setSaving(true)
+          try {
+            await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+            toast.success('Ustawienia zapisane')
+            onChange()
+          } catch { toast.error('Błąd zapisu') } finally { setSaving(false) }
+        }}><Save className="h-4 w-4 mr-2" /> {saving ? 'Zapisywanie...' : 'Zapisz zmiany'}</Button>
+      } />
+
+      <div className="grid gap-6">
+        {fields.map(group => (
+          <Card key={group.group} className="p-5">
+            <h3 className="font-semibold mb-4 flex items-center gap-2"><Palette className="h-4 w-4" /> {group.group}</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {group.items.map(item => (
+                <div key={item.key} className="grid gap-2">
+                  <Label htmlFor={item.key}>{item.label}</Label>
+                  {item.type === 'textarea' ? (
+                    <Textarea id={item.key} rows={2} value={form[item.key] || ''} onChange={e => setForm({ ...form, [item.key]: e.target.value })} />
+                  ) : item.type === 'color' ? (
+                    <div className="flex gap-2 items-center">
+                      <Input type="color" id={item.key} value={form[item.key] || '#6b7280'} onChange={e => setForm({ ...form, [item.key]: e.target.value })} className="w-16 h-10 p-1" />
+                      <Input value={form[item.key] || ''} onChange={e => setForm({ ...form, [item.key]: e.target.value })} className="font-mono" />
+                    </div>
+                  ) : (
+                    <Input id={item.key} value={form[item.key] || ''} onChange={e => setForm({ ...form, [item.key]: e.target.value })} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ==================== Tags Section ====================
+function TagsSection({ tags, onChange }: { tags: TagType[]; onChange: () => void }) {
+  const [editing, setEditing] = useState<TagType | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<TagType | null>(null)
+  const [form, setForm] = useState<any>({})
+
+  const open = (t: TagType | null) => {
+    setEditing(t)
+    setForm(t ? { name: t.name, color: t.color } : { name: '', color: '#6b7280' })
+    setFormOpen(true)
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Tagi" description={`${tags.length} tagów`} action={<Button onClick={() => open(null)}><Plus className="h-4 w-4 mr-2" /> Dodaj tag</Button>} />
+
+      {tags.length === 0 ? (
+        <EmptyState icon={TagIcon} title="Brak tagów" description="Dodaj pierwszy tag." action={<Button onClick={() => open(null)}><Plus className="h-4 w-4 mr-2" /> Dodaj tag</Button>} />
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {tags.map(t => (
+            <Card key={t.id} className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: t.color }} />
+                  <h3 className="font-semibold">#{t.name}</h3>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => open(t)}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(t)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">{t._count?.posts || 0} wpisów</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader><DialogTitle>{editing ? 'Edytuj tag' : 'Nowy tag'}</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2"><Label>Nazwa *</Label><Input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="grid gap-2">
+              <Label>Kolor</Label>
+              <div className="flex gap-2 items-center">
+                <Input type="color" value={form.color || '#6b7280'} onChange={e => setForm({ ...form, color: e.target.value })} className="w-16 h-10 p-1" />
+                <Input value={form.color || ''} onChange={e => setForm({ ...form, color: e.target.value })} className="font-mono" />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFormOpen(false)}>Anuluj</Button>
+            <Button onClick={async () => {
+              if (!form.name?.trim()) { toast.error('Nazwa jest wymagana'); return }
+              if (editing) {
+                await fetch(`/api/tags/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                toast.success('Tag zaktualizowany')
+              } else {
+                await fetch('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                toast.success('Tag dodany')
+              }
+              setFormOpen(false); onChange()
+            }}>{editing ? 'Zapisz' : 'Dodaj'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć tag?</AlertDialogTitle>
+            <AlertDialogDescription>Tag zostanie odpięty od wszystkich wpisów.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/tags/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Tag usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+// ==================== Contact Submissions Section ====================
+function ContactSection({ submissions, onChange }: { submissions: ContactSubmission[]; onChange: () => void }) {
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [viewing, setViewing] = useState<ContactSubmission | null>(null)
+  const filtered = statusFilter === 'all' ? submissions : submissions.filter(s => s.status === statusFilter)
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Wiadomości kontaktowe" description={`${submissions.length} wiadomości`} />
+
+      <div className="flex flex-wrap gap-2">
+        {['all', 'new', 'read', 'replied', 'archived'].map(s => (
+          <Button key={s} variant={statusFilter === s ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter(s)}>
+            {s === 'all' ? 'Wszystkie' : s === 'new' ? 'Nowe' : s === 'read' ? 'Przeczytane' : s === 'replied' ? 'Odpowiedziane' : 'Zarchiwizowane'}
+            <Badge variant="secondary" className="ml-2">{s === 'all' ? submissions.length : submissions.filter(x => x.status === s).length}</Badge>
+          </Button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Inbox} title="Brak wiadomości" description="Formularz kontaktowy nie wygenerował jeszcze wiadomości." />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(s => (
+            <Card key={s.id} className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => { setViewing(s); if (s.status === 'new') { fetch(`/api/contact/${s.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'read' }) }).then(() => onChange()) } }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-xs text-muted-foreground">&lt;{s.email}&gt;</span>
+                    {s.status === 'new' && <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">Nowa</Badge>}
+                  </div>
+                  <div className="text-sm font-medium mb-1">{s.subject}</div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">{s.message}</p>
+                </div>
+                <div className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(s.createdAt)}</div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!viewing} onOpenChange={o => !o && setViewing(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader><DialogTitle>{viewing?.subject}</DialogTitle></DialogHeader>
+          {viewing && (
+            <div className="space-y-3">
+              <div className="text-sm">
+                <div><span className="text-muted-foreground">Od:</span> <strong>{viewing.name}</strong> &lt;{viewing.email}&gt;</div>
+                <div className="text-muted-foreground">{formatDateTime(viewing.createdAt)}</div>
+              </div>
+              <div className="border-t pt-3 whitespace-pre-wrap text-sm">{viewing.message}</div>
+              <div className="flex flex-wrap gap-2 pt-3 border-t">
+                <Button size="sm" asChild>
+                  <a href={`mailto:${viewing.email}?subject=Re: ${encodeURIComponent(viewing.subject)}`}><Mail className="h-3 w-3 mr-1" /> Odpowiedz</a>
+                </Button>
+                <Button size="sm" variant="outline" onClick={async () => { await fetch(`/api/contact/${viewing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'replied' }) }); toast.success('Oznaczono jako odpowiedziane'); setViewing(null); onChange() }}>Oznacz jako odpowiedziane</Button>
+                <Button size="sm" variant="ghost" onClick={async () => { await fetch(`/api/contact/${viewing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) }); toast.success('Zarchiwizowano'); setViewing(null); onChange() }}>Zarchiwizuj</Button>
+                <Button size="sm" variant="ghost" className="text-destructive ml-auto" onClick={async () => { await fetch(`/api/contact/${viewing.id}`, { method: 'DELETE' }); toast.success('Usunięto'); setViewing(null); onChange() }}><Trash2 className="h-3 w-3 mr-1" /> Usuń</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+// ==================== Activity Log Section ====================
+function ActivitySection({ logs }: { logs: ActivityLog[] }) {
+  const [entityFilter, setEntityFilter] = useState('all')
+  const entities = useMemo(() => [...new Set(logs.map(l => l.entity))], [logs])
+  const filtered = entityFilter === 'all' ? logs : logs.filter(l => l.entity === entityFilter)
+
+  const actionColors: Record<string, string> = {
+    create: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    update: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    delete: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    login: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+    publish: 'bg-violet-500/10 text-violet-700 dark:text-violet-300',
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Log aktywności" description={`${logs.length} zdarzeń`} />
+
+      <div className="flex flex-wrap gap-2">
+        <Button variant={entityFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setEntityFilter('all')}>Wszystkie</Button>
+        {entities.map(e => (
+          <Button key={e} variant={entityFilter === e ? 'default' : 'outline'} size="sm" onClick={() => setEntityFilter(e)} className="capitalize">{e}</Button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={Activity} title="Brak zdarzeń" description="Brak aktywności do wyświetlenia." />
+      ) : (
+        <Card className="p-0 overflow-hidden">
+          <div className="divide-y divide-border">
+            {filtered.map(log => (
+              <div key={log.id} className="flex items-start gap-3 p-4 hover:bg-muted/50">
+                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-semibold uppercase", actionColors[log.action] || 'bg-muted text-muted-foreground')}>
+                  {log.action.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium capitalize">{log.action}</span>
+                    <Badge variant="outline" className="text-[10px]">{log.entity}</Badge>
+                  </div>
+                  {log.details && <p className="text-sm text-muted-foreground mt-0.5">{log.details}</p>}
+                  <div className="text-xs text-muted-foreground mt-1">{log.userName} · {formatDateTime(log.createdAt)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ==================== Search Section ====================
+function SearchSection() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<{ posts: Post[]; projects: Project[]; pages: Page[] } | null>(null)
+  const [searching, setSearching] = useState(false)
+
+  const doSearch = async () => {
+    if (!query.trim()) { setResults(null); return }
+    setSearching(true)
+    try {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+      const data = await r.json()
+      setResults(data)
+    } catch { toast.error('Błąd wyszukiwania') } finally { setSearching(false) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Wyszukiwarka globalna" description="Szukaj we wszystkich treściach CMS" />
+
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Szukaj..." className="pl-9 text-lg h-12" autoFocus />
+        </div>
+        <Button onClick={doSearch} disabled={searching} size="lg"><FileSearch className="h-4 w-4 mr-2" /> Szukaj</Button>
+      </div>
+
+      {results && (
+        <div className="space-y-6">
+          {results.posts.length === 0 && results.projects.length === 0 && results.pages.length === 0 ? (
+            <EmptyState icon={FileSearch} title="Brak wyników" description={`Nie znaleziono treści dla "${query}".`} />
+          ) : (
+            <>
+              {results.posts.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2"><FileText className="h-4 w-4" /> Wpisy ({results.posts.length})</h3>
+                  <div className="space-y-2">
+                    {results.posts.map(p => (
+                      <Card key={p.id} className="p-3"><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground line-clamp-1">{p.excerpt}</div></Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {results.projects.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2"><FolderKanban className="h-4 w-4" /> Projekty ({results.projects.length})</h3>
+                  <div className="space-y-2">
+                    {results.projects.map(p => (
+                      <Card key={p.id} className="p-3"><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground line-clamp-1">{p.summary}</div></Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {results.pages.length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3 flex items-center gap-2"><File className="h-4 w-4" /> Strony ({results.pages.length})</h3>
+                  <div className="space-y-2">
+                    {results.pages.map(p => (
+                      <Card key={p.id} className="p-3"><div className="font-medium">{p.title}</div><div className="text-xs text-muted-foreground">/{p.slug}</div></Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ==================== Users Section ====================
+function UsersSection({ users, onChange }: { users: User[]; onChange: () => void }) {
+  const [formOpen, setFormOpen] = useState(false)
+  const [form, setForm] = useState<any>({})
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
+
+  const roleColors: Record<string, string> = {
+    admin: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
+    editor: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    author: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Użytkownicy" description={`${users.length} użytkowników`} action={<Button onClick={() => { setForm({ email: '', name: '', password: '', role: 'editor', bio: '' }); setFormOpen(true) }}><UserPlus className="h-4 w-4 mr-2" /> Dodaj użytkownika</Button>} />
+
+      {users.length === 0 ? (
+        <EmptyState icon={Users} title="Brak użytkowników" description="Dodaj pierwszego użytkownika." />
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Użytkownik</TableHead>
+                <TableHead className="hidden md:table-cell">Rola</TableHead>
+                <TableHead className="hidden lg:table-cell">Utworzono</TableHead>
+                <TableHead className="w-[80px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map(u => (
+                <TableRow key={u.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-semibold">{u.name.charAt(0).toUpperCase()}</div>
+                      <div>
+                        <div className="font-medium">{u.name}</div>
+                        <div className="text-xs text-muted-foreground">{u.email}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell"><span className={cn("text-xs px-2 py-0.5 rounded-full font-medium capitalize", roleColors[u.role])}>{u.role}</span></TableCell>
+                  <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{formatDate(u.createdAt)}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm({ id: u.id, name: u.name, role: u.role, bio: u.bio || '' }); setFormOpen(true) }}><Pencil className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(u)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader><DialogTitle>{form.id ? 'Edytuj użytkownika' : 'Nowy użytkownik'}</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-2">
+            {!form.id && (
+              <>
+                <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
+                <div className="grid gap-2"><Label>Hasło *</Label><Input type="password" value={form.password || ''} onChange={e => setForm({ ...form, password: e.target.value })} /></div>
+              </>
+            )}
+            <div className="grid gap-2"><Label>Nazwa *</Label><Input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="grid gap-2">
+              <Label>Rola</Label>
+              <Select value={form.role || 'editor'} onValueChange={v => setForm({ ...form, role: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Administrator (pełny dostęp)</SelectItem>
+                  <SelectItem value="editor">Redaktor (treść)</SelectItem>
+                  <SelectItem value="author">Autor (własne wpisy)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {form.id && (
+              <div className="grid gap-2"><Label>Bio</Label><Textarea rows={3} value={form.bio || ''} onChange={e => setForm({ ...form, bio: e.target.value })} /></div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFormOpen(false)}>Anuluj</Button>
+            <Button onClick={async () => {
+              if (form.id) {
+                await fetch(`/api/users/${form.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: form.name, role: form.role, bio: form.bio }) })
+                toast.success('Użytkownik zaktualizowany')
+              } else {
+                if (!form.email?.trim() || !form.password?.trim() || !form.name?.trim()) { toast.error('Wszystkie pola są wymagane'); return }
+                const r = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
+                if (!r.ok) { toast.error('Błąd: email może być zajęty'); return }
+                toast.success('Użytkownik dodany')
+              }
+              setFormOpen(false); onChange()
+            }}>{form.id ? 'Zapisz' : 'Dodaj'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Usunąć użytkownika?</AlertDialogTitle>
+            <AlertDialogDescription>Użytkownik <strong>{deleteTarget?.name}</strong> straci dostęp do panelu.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+              if (!deleteTarget) return
+              await fetch(`/api/users/${deleteTarget.id}`, { method: 'DELETE' })
+              toast.success('Użytkownik usunięty')
+              setDeleteTarget(null); onChange()
+            }}>Usuń</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Card className="p-4 bg-muted/30 border-dashed">
+        <div className="flex items-start gap-3">
+          <Lock className="h-4 w-4 text-muted-foreground mt-0.5" />
+          <div className="text-sm">
+            <div className="font-medium mb-1">Domyślne konto demo</div>
+            <div className="text-muted-foreground">Email: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">admin@example.com</code> · Hasło: <code className="bg-muted px-1.5 py-0.5 rounded text-xs">admin123</code></div>
+            <div className="text-xs text-muted-foreground mt-1">Logowanie dostępne przez API: <code>POST /api/auth</code></div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ==================== Backup Section ====================
+function BackupSection({ counts }: { counts: Record<string, number> }) {
+  const [exporting, setExporting] = useState(false)
+
+  const doExport = async () => {
+    setExporting(true)
+    try {
+      const r = await fetch('/api/backup')
+      const data = await r.json()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `portfolio-cms-backup-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Kopia zapasowa pobrana')
+    } catch { toast.error('Błąd eksportu') } finally { setExporting(false) }
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title="Kopia zapasowa" description="Eksport i import danych CMS" />
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><Download className="h-5 w-5" /></div>
+            <div>
+              <h3 className="font-semibold">Eksport danych</h3>
+              <p className="text-sm text-muted-foreground">Pobierz pełną kopię zapasową jako JSON</p>
+            </div>
+          </div>
+          <div className="text-sm space-y-1 mb-4">
+            <div className="flex justify-between"><span className="text-muted-foreground">Wpisy</span><span className="font-medium">{counts.posts}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Projekty</span><span className="font-medium">{counts.projects}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Strony</span><span className="font-medium">{counts.pages}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Kategorie</span><span className="font-medium">{counts.categories}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Tagi</span><span className="font-medium">{counts.tags}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Komentarze</span><span className="font-medium">{counts.comments}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Media</span><span className="font-medium">{counts.media}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Wiadomości</span><span className="font-medium">{counts.contactSubmissions}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Użytkownicy</span><span className="font-medium">{counts.users}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Logi aktywności</span><span className="font-medium">{counts.activityLogs}</span></div>
+          </div>
+          <Button onClick={doExport} disabled={exporting} className="w-full">
+            <Download className="h-4 w-4 mr-2" /> {exporting ? 'Eksportowanie...' : 'Pobierz kopię zapasową'}
+          </Button>
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center"><Database className="h-5 w-5" /></div>
+            <div>
+              <h3 className="font-semibold">Statystyka bazy</h3>
+              <p className="text-sm text-muted-foreground">Podsumowanie danych w systemie</p>
+            </div>
+          </div>
+          <div className="space-y-3 text-sm">
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Baza danych</div>
+              <div className="font-medium">Supabase PostgreSQL</div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Schema</div>
+              <div className="font-mono text-sm">portfolio_cms</div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Hosting</div>
+              <div className="font-medium">Vercel · Region: Frankfurt</div>
+            </div>
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <div className="text-xs text-muted-foreground">Wersja CMS</div>
+              <div className="font-medium">2.0 · WordPress-like</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-6">
+        <div className="flex items-start gap-3 mb-3">
+          <Rss className="h-5 w-5 text-orange-500 mt-0.5" />
+          <div>
+            <h3 className="font-semibold">SEO i feed</h3>
+            <p className="text-sm text-muted-foreground">Publiczne endpointy dla wyszukiwarek i czytników RSS</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 text-sm">
+          <a href="/api/feed" target="_blank" className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="font-medium flex items-center gap-2"><Rss className="h-3.5 w-3.5 text-orange-500" /> RSS Feed</div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">/api/feed</div>
+          </a>
+          <a href="/api/sitemap" target="_blank" className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="font-medium flex items-center gap-2"><LayoutIcon className="h-3.5 w-3.5" /> Sitemap.xml</div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">/api/sitemap</div>
+          </a>
+          <a href="/api/robots" target="_blank" className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+            <div className="font-medium flex items-center gap-2"><File className="h-3.5 w-3.5" /> Robots.txt</div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">/api/robots</div>
+          </a>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ==================== Main App ====================
+function CMSApp() {
+  const router = useRouter()
+  const [authChecked, setAuthChecked] = useState(false)
+  const [section, setSection] = useState<Section>('dashboard')
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [publicView, setPublicView] = useState<PublicView | null>(null)
+  const [data, setData] = useState<{ posts: Post[]; projects: Project[]; pages: Page[]; categories: Category[]; tags: TagType[]; comments: Comment[]; media: Media[]; settings: Settings; contactSubmissions: ContactSubmission[]; activityLogs: ActivityLog[]; users: User[] }>({
+    posts: [], projects: [], pages: [], categories: [], tags: [], comments: [], media: [], settings: {}, contactSubmissions: [], activityLogs: [], users: [],
+  })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/auth')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.authenticated) {
+          router.push('/login')
+        } else {
+          setAuthChecked(true)
+        }
+      })
+      .catch(() => router.push('/login'))
+  }, [router])
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const [postsRes, projectsRes, pagesRes, categoriesRes, tagsRes, commentsRes, mediaRes, settingsRes, contactRes, activityRes, usersRes] = await Promise.all([
+        fetch('/api/posts?status=all').then(r => r.json()).catch(() => []),
+        fetch('/api/projects?status=all').then(r => r.json()).catch(() => []),
+        fetch('/api/pages').then(r => r.json()).catch(() => []),
+        fetch('/api/categories').then(r => r.json()).catch(() => []),
+        fetch('/api/tags').then(r => r.json()).catch(() => []),
+        fetch('/api/comments?status=all').then(r => r.json()).catch(() => []),
+        fetch('/api/media').then(r => r.json()).catch(() => []),
+        fetch('/api/settings').then(r => r.json()).catch(() => ({})),
+        fetch('/api/contact').then(r => r.json()).catch(() => []),
+        fetch('/api/activity?limit=100').then(r => r.json()).catch(() => []),
+        fetch('/api/users').then(r => r.json()).catch(() => []),
+      ])
+      setData({
+        posts: postsRes, projects: projectsRes, pages: pagesRes,
+        categories: categoriesRes, tags: tagsRes, comments: commentsRes,
+        media: mediaRes, settings: settingsRes,
+        contactSubmissions: contactRes, activityLogs: activityRes, users: usersRes,
+      })
+    } catch (e) {
+      console.error(e)
+      toast.error('Nie udało się pobrać danych')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  // Auto-seed on first mount if empty
+  useEffect(() => {
+    if (!loading && data.projects.length === 0 && data.posts.length === 0) {
+      fetch('/api/seed-all', { method: 'POST' }).then(() => fetchAll()).catch(() => {})
+    }
+  }, [loading, data.projects.length, data.posts.length, fetchAll])
+
+  const counts = useMemo(() => ({
+    projects: data.projects.length,
+    posts: data.posts.length,
+    pages: data.pages.length,
+    categories: data.categories.length,
+    tags: data.tags.length,
+    comments: data.comments.filter(c => c.status === 'pending').length,
+    media: data.media.length,
+    contactSubmissions: data.contactSubmissions.filter(s => s.status === 'new').length,
+    activityLogs: data.activityLogs.length,
+    users: data.users.length,
+  }), [data])
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Sprawdzanie autoryzacji...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Public view mode — render public site, with floating "back to admin" button
+  if (publicView !== null) {
+    return (
+      <div className="relative">
+        <PublicSite
+          view={publicView}
+          setView={setPublicView}
+          posts={data.posts}
+          projects={data.projects}
+          pages={data.pages}
+          settings={data.settings}
+        />
+        <Button
+          onClick={() => setPublicView(null)}
+          className="fixed bottom-4 right-4 z-50 shadow-lg"
+          variant="default"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1.5" /> Wróć do panelu
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex bg-background">
+      <Sidebar section={section} setSection={setSection} counts={counts} mobileOpen={mobileNavOpen} setMobileOpen={setMobileNavOpen} />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 h-16 border-b border-border bg-background/80 backdrop-blur-md">
+          <div className="h-full flex items-center justify-between gap-4 px-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNavOpen(true)}><Menu className="h-4 w-4" /></Button>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Panel admina</span>
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                <span className="font-medium capitalize">{NAV.find(n => n.id === section)?.label}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <Button variant="outline" size="sm" onClick={() => setPublicView('home')}>
+                <HomeIcon className="h-3.5 w-3.5 mr-1.5" /> Podgląd strony
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          {loading ? (
+            <div className="space-y-4">
+              <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-32 bg-muted animate-pulse rounded-xl" />)}
+              </div>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div key={section} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}>
+                {section === 'dashboard' && <Dashboard data={data} onSeed={async () => {
+                  toast.loading('Ładowanie danych demo...')
+                  await fetch('/api/seed-all', { method: 'POST' })
+                  await fetchAll()
+                  toast.success('Dane demo załadowane')
+                }} />}
+                {section === 'projects' && <ProjectsSection projects={data.projects} onChange={fetchAll} />}
+                {section === 'posts' && <PostsSection posts={data.posts} categories={data.categories} onChange={fetchAll} />}
+                {section === 'pages' && <PagesSection pages={data.pages} onChange={fetchAll} />}
+                {section === 'categories' && <CategoriesSection categories={data.categories} onChange={fetchAll} />}
+                {section === 'tags' && <TagsSection tags={data.tags} onChange={fetchAll} />}
+                {section === 'comments' && <CommentsSection comments={data.comments} onChange={fetchAll} />}
+                {section === 'contact' && <ContactSection submissions={data.contactSubmissions} onChange={fetchAll} />}
+                {section === 'media' && <MediaSection media={data.media} onChange={fetchAll} />}
+                {section === 'search' && <SearchSection />}
+                {section === 'activity' && <ActivitySection logs={data.activityLogs} />}
+                {section === 'users' && <UsersSection users={data.users} onChange={fetchAll} />}
+                {section === 'backup' && <BackupSection counts={{ ...counts, contactSubmissions: data.contactSubmissions.length, activityLogs: data.activityLogs.length }} />}
+                {section === 'settings' && <SettingsSection settings={data.settings} onChange={fetchAll} />}
+              </motion.div>
+            </AnimatePresence>
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}
+
+function MDXEditorField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, []) // eslint-disable-line react-hooks/set-state-in-effect
+  if (!mounted) return <div className="h-[300px] bg-muted animate-pulse rounded-lg" />
+  return (
+    <div className="border rounded-lg overflow-hidden [&_.mdxeditor]:border-0 [&_.mdxeditor-toolbar]:rounded-none [&_.mdxeditor-toolbar]:border-b [&_.mdxeditor-toolbar]:bg-muted/50">
+      <MDXEditor
+        markdown={value}
+        onChange={onChange}
+        className="min-h-[300px]"
+        contentEditableClassName="prose prose-sm dark:prose-invert max-w-none p-4 focus:outline-none"
+        plugins={[
+          toolbarPlugin({ toolbarContents: () => <><UndoRedo /><BoldItalicUnderlineToggles /><BlockTypeSelect /><CreateLink /><InsertImage /><InsertTable /></> }),
+          headingsPlugin(),
+          listsPlugin(),
+          quotePlugin(),
+          thematicBreakPlugin(),
+          codeBlockPlugin(),
+          frontmatterPlugin(),
+        ]}
+      />
+    </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+      <CMSApp />
+    </ThemeProvider>
+  )
+}

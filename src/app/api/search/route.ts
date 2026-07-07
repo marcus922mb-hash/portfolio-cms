@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
     db.post.findMany({
       where: {
         OR: [
-          { title: { contains: q, mode: 'insensitive' } },
-          { excerpt: { contains: q, mode: 'insensitive' } },
-          { content: { contains: q, mode: 'insensitive' } },
+          { title: { contains: q } },
+          { excerpt: { contains: q } },
+          { content: { contains: q } },
         ],
       },
       take: 10,
@@ -23,9 +23,9 @@ export async function GET(request: NextRequest) {
     db.project.findMany({
       where: {
         OR: [
-          { title: { contains: q, mode: 'insensitive' } },
-          { summary: { contains: q, mode: 'insensitive' } },
-          { description: { contains: q, mode: 'insensitive' } },
+          { title: { contains: q } },
+          { summary: { contains: q } },
+          { description: { contains: q } },
         ],
       },
       take: 10,
@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
     db.page.findMany({
       where: {
         OR: [
-          { title: { contains: q, mode: 'insensitive' } },
-          { content: { contains: q, mode: 'insensitive' } },
+          { title: { contains: q } },
+          { content: { contains: q } },
         ],
       },
       take: 10,

@@ -43,7 +43,21 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json({ authenticated: false })
+  try {
+    const { getSession } = await import('@/lib/auth')
+    const user = await getSession()
+    if (!user) return NextResponse.json({ authenticated: false })
+    return NextResponse.json({
+      authenticated: true,
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      avatar: user.avatar,
+    })
+  } catch {
+    return NextResponse.json({ authenticated: false })
+  }
 }
 
 // DELETE /api/auth - logout

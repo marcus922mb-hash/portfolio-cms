@@ -11,7 +11,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, string>
-    const results = []
+    const results: unknown[] = []
     for (const [key, value] of Object.entries(body)) {
       const s = await db.setting.upsert({
         where: { key },
