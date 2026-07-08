@@ -27,11 +27,12 @@ const PUBLIC_SEED_PATHS = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Check if route is protected (starts with /api/ or /admin)
+  // Check if route is protected (starts with /api/, /admin or /panel)
   const isApi = pathname.startsWith('/api/')
   const isAdmin = pathname.startsWith('/admin')
+  const isPanel = pathname.startsWith('/panel')
 
-  if (!isApi && !isAdmin) {
+  if (!isApi && !isAdmin && !isPanel) {
     return NextResponse.next()
   }
 
@@ -55,7 +56,7 @@ export async function middleware(request: NextRequest) {
   // All other API requests require auth
   const session = request.cookies.get('cms_session')?.value
   if (!session) {
-    if (isAdmin) {
+    if (isAdmin || isPanel) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -65,5 +66,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*', '/admin/:path*'],
+  matcher: ['/api/:path*', '/admin/:path*', '/panel/:path*'],
 }

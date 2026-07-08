@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { PanelShell } from "@/components/panel/shell";
-import { createClient } from "@/lib/supabase/server";
+import { getSession } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: {
@@ -12,24 +12,18 @@ export const metadata: Metadata = {
 };
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
-  // Secondary guard — proxy.ts handles the first check, but this ensures
-  // the session is valid even if the request bypassed middleware.
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // Use portfolio-cms native auth (cms_session cookie + Prisma)
+  const user = await getSession();
 
   if (!user) {
     redirect("/login");
   }
 
-  const metadata = user.user_metadata ?? {};
-  const fullName =
-    typeof metadata.full_name === "string" && metadata.full_name.trim()
-      ? metadata.full_name.trim()
-      : user.email?.split("@")[0] ?? "Administrator";
+  const fullName = user.name ?? user.email?.split("@")[0] ?? "Administrator";
   const initials = fullName
     .split(/\s+/)
     .slice(0, 2)
-    .map((part) => part[0])
+    .map((part: string) => part[0])
     .join("")
     .toUpperCase();
 
@@ -39,8 +33,8 @@ export default async function PanelLayout({ children }: { children: React.ReactN
         fullName,
         email: user.email ?? "",
         initials: initials || "AD",
-        role: "Administrator",
-        reducedMotion: metadata.reduced_motion === true,
+        role: user.role ?? "Administrator",
+        reducedMotion: false,
       }}
     >
       {children}
