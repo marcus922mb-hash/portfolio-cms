@@ -1,0 +1,4 @@
+# Wygeneruj długi losowy sekret i ustaw tę samą wartość jako
+# CLOUDFLARE_WORKERS_AI_SECRET w aplikacji Next.js.
+AI_ROUTER_SHARED_SECRET=
+

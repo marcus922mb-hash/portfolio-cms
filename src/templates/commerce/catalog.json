@@ -1,0 +1,75 @@
+[
+  {
+    "id": "shop-fashion-editorial",
+    "name": "Atelier Store",
+    "industry": "Moda",
+    "group": "ecommerce",
+    "websiteType": "online-shop",
+    "summary": "Pełny sklep modowy z kolekcjami, filtrami, editorialem i newsletterem.",
+    "style": "Fashion editorial",
+    "tags": ["sklep online", "moda", "kolekcje"],
+    "rating": 4.9,
+    "featured": true,
+    "colors": {"primary":"#8A6756","secondary":"#9C968D","accent":"#C39A5C","neutral":"#E4E0DA","dark":"#171614","light":"#FDFCF9"},
+    "fonts": {"heading":"Bodoni Moda","body":"Manrope"},
+    "animations": ["reveal","parallax","stagger","hover"],
+    "sections": ["navbar","hero","woo-products","features","gallery","testimonials","faq","newsletter","footer","seo","404"],
+    "copy": {
+      "eyebrow": "New collection / 2026",
+      "heroTitle": "Forma, która zostaje na dłużej.",
+      "heroSubtitle": "Krótkie kolekcje, naturalne tkaniny i kroje stworzone do codziennego życia.",
+      "aboutTitle": "Mniej kolekcji. Więcej znaczenia.",
+      "aboutText": "Projektujemy odpowiedzialnie, produkujemy lokalnie i pokazujemy dokładnie, z czego powstaje każdy model.",
+      "services": ["Nowości","Bestsellery","Akcesoria"],
+      "ctaTitle": "Odkryj aktualną kolekcję"
+    }
+  },
+  {
+    "id": "shop-natural-living",
+    "name": "Natural Living",
+    "industry": "Dom i lifestyle",
+    "group": "ecommerce",
+    "websiteType": "online-shop",
+    "summary": "Ciepły sklep produktowy z kategoriami, historią materiałów i rekomendacjami.",
+    "style": "Organic commerce",
+    "tags": ["sklep online", "dom", "lifestyle"],
+    "rating": 4.8,
+    "colors": {"primary":"#65715B","secondary":"#9A9A82","accent":"#B98C50","neutral":"#DDE0D4","dark":"#1D241A","light":"#FAFCF7"},
+    "fonts": {"heading":"Lora","body":"Inter"},
+    "animations": ["fadeIn","parallax","stagger","hover"],
+    "sections": ["navbar","hero","woo-products","about","gallery","reviews-grid","faq","newsletter","footer","seo","404"],
+    "copy": {
+      "eyebrow": "Przedmioty na spokojne lata",
+      "heroTitle": "Naturalnie urządzony dom.",
+      "heroSubtitle": "Wyselekcjonowane dodatki, dobre materiały i przedmioty, które pięknie się starzeją.",
+      "aboutTitle": "Dom bez przypadkowych rzeczy",
+      "aboutText": "Wybieramy małe manufaktury i produkty, które łączą użyteczność z odpowiedzialnym wykonaniem.",
+      "services": ["Tekstylia","Ceramika","Dekoracje"],
+      "ctaTitle": "Zobacz całą kolekcję"
+    }
+  },
+  {
+    "id": "shop-kids-color",
+    "name": "Little Stories",
+    "industry": "Dzieci",
+    "group": "ecommerce",
+    "websiteType": "online-shop",
+    "summary": "Kolorowy, uporządkowany sklep dziecięcy z kategoriami wieku i poradnikiem zakupowym.",
+    "style": "Playful clean",
+    "tags": ["sklep online", "dzieci", "prezenty"],
+    "rating": 4.8,
+    "colors": {"primary":"#D36F5F","secondary":"#75A7A0","accent":"#E7B64E","neutral":"#F1E9DB","dark":"#26302D","light":"#FFFCF6"},
+    "fonts": {"heading":"Bricolage Grotesque","body":"Nunito"},
+    "animations": ["slideUp","stagger","float","hover"],
+    "sections": ["navbar","hero","woo-products","features","gallery","testimonials","faq","newsletter","footer","seo","404"],
+    "copy": {
+      "eyebrow": "Małe rzeczy, wielkie historie",
+      "heroTitle": "Zabawa, która rozwija wyobraźnię.",
+      "heroSubtitle": "Bezpieczne zabawki, książki i prezenty wybrane z myślą o każdym etapie dzieciństwa.",
+      "aboutTitle": "Wybieramy jak dla własnych dzieci",
+      "aboutText": "Sprawdzamy materiały, trwałość i wartość zabawy, aby zakupy były prostsze i naprawdę trafione.",
+      "services": ["0–2 lata","3–5 lat","6+ lat"],
+      "ctaTitle": "Znajdź dobry prezent"
+    }
+  }
+]

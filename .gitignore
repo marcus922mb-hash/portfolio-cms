@@ -76,3 +76,4 @@ download/*.jpeg
 .cache/
 .turbo/
 .eslintcache
+.env*

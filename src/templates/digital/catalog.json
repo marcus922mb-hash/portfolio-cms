@@ -1,0 +1,95 @@
+[
+  {
+    "id": "card-local-pro",
+    "name": "Local Pro Card",
+    "industry": "Usługi lokalne",
+    "group": "digital-card",
+    "summary": "Jednoekranowa wizytówka z ofertą, kontaktem i szybkim przejściem do WhatsApp.",
+    "style": "Local editorial",
+    "tags": ["wizytówka", "lokalna firma", "WhatsApp"],
+    "rating": 4.9,
+    "featured": true,
+    "colors": {"primary":"#9B7048","secondary":"#9E998E","accent":"#CBA76B","neutral":"#E6E0D6","dark":"#1B1915","light":"#FCFAF6"},
+    "fonts": {"heading":"Cormorant Garamond","body":"Manrope"},
+    "animations": ["fadeIn","slideUp","float","hover"],
+    "sections": ["hero","features","contact","seo","404"],
+    "copy": {
+      "eyebrow": "Lokalnie i konkretnie",
+      "heroTitle": "Fachowa pomoc dokładnie wtedy, gdy jej potrzebujesz.",
+      "heroSubtitle": "Krótka oferta, jasne zasady i bezpośredni kontakt bez szukania po całej stronie.",
+      "aboutTitle": "Najważniejsze informacje w jednym miejscu",
+      "aboutText": "Mobilna wizytówka zaprojektowana tak, aby klient od razu wiedział, co oferujesz i jak się z Tobą skontaktować.",
+      "services": ["Szybka wycena","Dogodne terminy","Kontakt WhatsApp"],
+      "ctaTitle": "Porozmawiajmy o zleceniu"
+    }
+  },
+  {
+    "id": "card-expert",
+    "name": "Expert Profile",
+    "industry": "Ekspert / konsultant",
+    "group": "digital-card",
+    "summary": "Osobista wizytówka eksperta z usługami, wiarygodnością i kalendarzem kontaktu.",
+    "style": "Personal premium",
+    "tags": ["ekspert", "konsultant", "marka osobista"],
+    "rating": 4.8,
+    "colors": {"primary":"#355B68","secondary":"#81959B","accent":"#C49A5A","neutral":"#DCE3E3","dark":"#142328","light":"#F8FBFA"},
+    "fonts": {"heading":"DM Serif Display","body":"Inter"},
+    "animations": ["reveal","slideUp","float","hover"],
+    "sections": ["hero","features","testimonials","contact","seo","404"],
+    "copy": {
+      "eyebrow": "Wiedza, która porządkuje decyzje",
+      "heroTitle": "Pomagam przejść od problemu do dobrego planu.",
+      "heroSubtitle": "Konsultacje 1:1 dla osób i firm, które potrzebują konkretnego kierunku działania.",
+      "aboutTitle": "Doświadczenie podane bez zbędnego żargonu",
+      "aboutText": "Łączę analizę, praktykę i prostą komunikację, aby każda rozmowa kończyła się użytecznym planem.",
+      "services": ["Konsultacja 60 min","Audyt sytuacji","Plan działania"],
+      "ctaTitle": "Umów pierwszą rozmowę"
+    }
+  },
+  {
+    "id": "card-beauty-booking",
+    "name": "Beauty Booking",
+    "industry": "Uroda",
+    "group": "digital-card",
+    "summary": "Mobilna wizytówka salonu z najważniejszymi zabiegami i przyciskiem rezerwacji.",
+    "style": "Beauty soft",
+    "tags": ["beauty", "rezerwacje", "mobile"],
+    "rating": 4.8,
+    "colors": {"primary":"#A96F78","secondary":"#C7A5A5","accent":"#B98B57","neutral":"#F0E5E3","dark":"#2A191C","light":"#FFF9F8"},
+    "fonts": {"heading":"Playfair Display","body":"Nunito Sans"},
+    "animations": ["fadeIn","zoomIn","float","hover"],
+    "sections": ["hero","services","gallery","contact","seo","404"],
+    "copy": {
+      "eyebrow": "Chwila dla Ciebie",
+      "heroTitle": "Naturalny efekt. Spokojna atmosfera.",
+      "heroSubtitle": "Poznaj najpopularniejsze zabiegi i zarezerwuj dogodny termin w kilka chwil.",
+      "aboutTitle": "Pielęgnacja dopasowana do Ciebie",
+      "aboutText": "Każdą wizytę zaczynamy od rozmowy i dobieramy zabieg do realnych potrzeb skóry.",
+      "services": ["Pielęgnacja twarzy","Stylizacja brwi","Masaż kobido"],
+      "ctaTitle": "Zarezerwuj termin"
+    }
+  },
+  {
+    "id": "card-food-menu",
+    "name": "Menu Quick",
+    "industry": "Gastronomia",
+    "group": "digital-card",
+    "summary": "Szybka wizytówka lokalu z menu dnia, godzinami i mapą dojazdu.",
+    "style": "Food bold",
+    "tags": ["gastronomia", "menu", "lokalnie"],
+    "rating": 4.7,
+    "colors": {"primary":"#B45F39","secondary":"#8E7A68","accent":"#D4A24C","neutral":"#E7DDD2","dark":"#24150F","light":"#FFF9F2"},
+    "fonts": {"heading":"Fraunces","body":"Source Sans 3"},
+    "animations": ["slideUp","reveal","pulse","hover"],
+    "sections": ["hero","menu-section","map","contact","seo","404"],
+    "copy": {
+      "eyebrow": "Dzisiaj gotujemy",
+      "heroTitle": "Dobry smak czeka tuż za rogiem.",
+      "heroSubtitle": "Sprawdź menu, godziny otwarcia i zamówienie na wynos bez zbędnych kliknięć.",
+      "aboutTitle": "Krótka karta, świeże składniki",
+      "aboutText": "Gotujemy sezonowo i lokalnie. Każdego dnia znajdziesz u nas kilka dopracowanych propozycji.",
+      "services": ["Menu dnia","Na wynos","Rezerwacje"],
+      "ctaTitle": "Sprawdź dzisiejsze menu"
+    }
+  }
+]
